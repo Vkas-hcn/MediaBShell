@@ -192,8 +192,7 @@ object AdScheduler : DefaultLifecycleObserver, Application.ActivityLifecycleCall
     ): Boolean = showInternal(
         location = location,
         activity = activity,
-        bypassInterval = location == AdLocation.FIRST_SPLASH_COLD ||
-            location == AdLocation.SPLASH_HOT,
+        bypassInterval = location == AdLocation.FIRST_SPLASH_COLD,
         pairSegment = false,
         preferredFormat = preferredFormatFor(location),
         onDismiss = onDismiss,
@@ -318,8 +317,8 @@ object AdScheduler : DefaultLifecycleObserver, Application.ActivityLifecycleCall
         -> listOf(coldSceneName)
 
         AdLocation.SPLASH_HOT -> {
-            // Prefer existing cold/hot inventory without forcing a new cold load.
-            listOf(AdScenes.HOT_OPEN, AdScenes.COLD_OPEN_A, AdScenes.COLD_OPEN)
+            // Hot resume must use the hot App Open slot; never fall back to cold.
+            listOf(AdScenes.HOT_OPEN)
         }
 
         AdLocation.RETURN_AD,
@@ -377,9 +376,8 @@ object AdScheduler : DefaultLifecycleObserver, Application.ActivityLifecycleCall
     }
 
     private fun passesInterval(location: AdLocation): Boolean {
-        // First cold splash of the day always allowed; hot must-show also bypasses via flag.
+        // First cold splash of the day always allowed; hot resume obeys hd_ad_interval.
         if (location == AdLocation.FIRST_SPLASH_COLD) return true
-        if (location == AdLocation.SPLASH_HOT) return true
         val intervalMs = AdPolicy.adIntervalMs()
         if (intervalMs <= 0) return true
         return System.currentTimeMillis() - lastShowAtMs >= intervalMs
@@ -409,9 +407,9 @@ object AdScheduler : DefaultLifecycleObserver, Application.ActivityLifecycleCall
      * if Empty, forcePreloadHot and retry once — never silently swallow Show.
      */
     private fun attemptHotSplashMustShow(act: Activity) {
-        Log.i(TAG, "V2 hot must-show: attempt splash_hot")
-        // Ordinary preload (may skip if cold Ready) — OK; Show is independent.
-        preload(AdScenes.HOT_OPEN)
+        Log.i(TAG, "V2 hot resume: attempt splash_hot App Open")
+        // Hot must ignore the cold-ready skip: hot_open owns the warm App Open slot.
+        forcePreloadHot()
         mainHandler.postDelayed({
             val live = currentActivityOr(act) ?: return@postDelayed
             if (showing.get()) {
@@ -428,11 +426,11 @@ object AdScheduler : DefaultLifecycleObserver, Application.ActivityLifecycleCall
         val started = showInternal(
             location = AdLocation.SPLASH_HOT,
             activity = act,
-            bypassInterval = true,
+            bypassInterval = false,
             pairSegment = false,
-            preferredFormat = null,
+            preferredFormat = AdFormat.LAUNCH_SCREEN,
             onDismiss = { shown ->
-                Log.i(TAG, "hot splash_hot dismiss shown=$shown (standalone, not 成对)")
+                Log.i(TAG, "hot splash_hot dismiss shown=$shown (standalone App Open, not 成对)")
             },
         )
         if (started) return

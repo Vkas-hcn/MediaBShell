@@ -46,40 +46,49 @@ fun DetailScreen(
     ),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    when (val s = state) {
-        UiState.Loading -> LoadingBox()
-        is UiState.Error -> {
-            // invalid_media only when Intent mediaId missing / true invalid — never probe.
-            val msg = when {
-                mediaId <= 0 ||
-                    s.message == "invalid_media" ||
-                    s.message == "Invalid media id" ->
-                    stringResource(R.string.invalid_media)
-                s.message == "empty_links" ||
-                    s.message == "no_alive_links" ||
-                    s.message == "no_available_sources" ->
-                    stringResource(R.string.no_available_lines)
-                else -> s.message
+    var loadingMaskVisible by remember(mediaId) { mutableStateOf(true) }
+    LaunchedEffect(state) {
+        if (state is UiState.Success) loadingMaskVisible = false
+    }
+    Box(Modifier.fillMaxSize()) {
+        when (val s = state) {
+            UiState.Loading -> LoadingBox()
+            is UiState.Error -> {
+                // invalid_media only when Intent mediaId missing / true invalid — never probe.
+                val msg = when {
+                    mediaId <= 0 ||
+                        s.message == "invalid_media" ||
+                        s.message == "Invalid media id" ->
+                        stringResource(R.string.invalid_media)
+                    s.message == "empty_links" ||
+                        s.message == "no_alive_links" ||
+                        s.message == "no_available_sources" ->
+                        stringResource(R.string.no_available_lines)
+                    else -> s.message
+                }
+                ErrorBox(
+                    message = msg,
+                    onRetry = if (mediaId <= 0) {
+                        {}
+                    } else {
+                        viewModel::refresh
+                    },
+                )
             }
-            ErrorBox(
-                message = msg,
-                onRetry = if (mediaId <= 0) {
-                    {}
-                } else {
-                    viewModel::refresh
-                },
+            is UiState.Success -> DetailContent(
+                mediaId = mediaId,
+                model = s.data,
+                autoPlay = autoPlay,
+                onBack = onBack,
+                onSelectSeason = viewModel::selectSeason,
+                onSelectLine = viewModel::selectLine,
+                onPlay = onPlay,
+                onOpenRecommend = onOpenRecommend,
             )
         }
-        is UiState.Success -> DetailContent(
-            mediaId = mediaId,
-            model = s.data,
-            autoPlay = autoPlay,
-            onBack = onBack,
-            onSelectSeason = viewModel::selectSeason,
-            onSelectLine = viewModel::selectLine,
-            onPlay = onPlay,
-            onOpenRecommend = onOpenRecommend,
-        )
+        if (loadingMaskVisible) {
+            DetailLoadingMask(onBack = onBack)
+        }
     }
 }
 

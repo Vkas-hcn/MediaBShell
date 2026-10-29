@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -23,11 +24,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.DisposableEffect
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -49,6 +53,7 @@ import com.hdvideoplay.media.ads.AdScheduler
 import com.hdvideoplay.media.ads.NativeReturnPresenter
 import com.hdvideoplay.media.ads.PageDwellTracker
 import com.hdvideoplay.media.data.dto.MediaItemDto
+import com.hdvideoplay.media.data.local.WatchHistoryRepository
 import com.hdvideoplay.media.ui.channel.ChannelScreen
 import com.hdvideoplay.media.ui.home.HomeScreen
 import com.hdvideoplay.media.ui.module.ModuleScreen
@@ -118,6 +123,10 @@ fun AppNav() {
     val context = LocalContext.current
     val backStack by navController.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
+    val historyRepository = remember(context) { WatchHistoryRepository.get(context) }
+    val continueWatching by historyRepository.observeContinueWatching(1)
+        .collectAsStateWithLifecycle(initialValue = emptyList())
+    var dismissedResumeKey by rememberSaveable { mutableStateOf<String?>(null) }
 
     // V2C: Home/Channel/Search/History/Module enter dwell (+ Detail/Player Activities).
     // My excluded: clear previous clock without firing; never enter(MY).
@@ -280,11 +289,16 @@ fun AppNav() {
             }
         },
     ) { padding ->
-        NavHost(
-            navController = navController,
-            startDestination = Routes.HOME,
-            modifier = Modifier.padding(padding),
+        Box(
+            Modifier
+                .fillMaxSize()
+                .padding(padding),
         ) {
+            NavHost(
+                navController = navController,
+                startDestination = Routes.HOME,
+                modifier = Modifier.fillMaxSize(),
+            ) {
             composable(Routes.HOME) {
                 HomeScreen(
                     onOpenModule = { id, title ->
@@ -339,6 +353,28 @@ fun AppNav() {
                     onOpenDetail = ::openDetail,
                 )
             }
+        }
+            QuickReturnOverlay(
+                progress = continueWatching.firstOrNull(),
+                dismissedKey = dismissedResumeKey,
+                onOpen = { progress ->
+                    context.startActivity(
+                        PlayerActivity.createIntent(
+                            context = context,
+                            mediaId = progress.mediaId,
+                            episode = progress.episode ?: 0,
+                            title = progress.title,
+                            startFullscreen = false,
+                            lineIndex = 0,
+                            startPositionMs = progress.progressSec * 1000L,
+                        ),
+                    )
+                },
+                onDismiss = { dismissedResumeKey = it },
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(bottom = 12.dp),
+            )
         }
     }
 }

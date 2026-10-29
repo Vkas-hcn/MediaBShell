@@ -48,15 +48,6 @@ fun SettingsScreen(onBack: () -> Unit) {
 }
 
 @Composable
-fun AboutScreen(onBack: () -> Unit) {
-    SimpleShellScreen(
-        title = stringResource(R.string.my_about_title),
-        body = stringResource(R.string.my_about_body),
-        onBack = onBack,
-    )
-}
-
-@Composable
 private fun SimpleShellScreen(
     title: String,
     body: String,

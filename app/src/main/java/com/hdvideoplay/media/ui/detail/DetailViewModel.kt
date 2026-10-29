@@ -9,7 +9,9 @@ import com.hdvideoplay.media.data.dto.SeasonDto
 import com.hdvideoplay.media.data.probe.PlaySourceProbe
 import com.hdvideoplay.media.data.repo.MediaRepository
 import com.hdvideoplay.media.ui.components.UiState
-import kotlinx.coroutines.async
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -63,6 +65,7 @@ class DetailViewModel(
 
     private val _state = MutableStateFlow<UiState<DetailUiModel>>(UiState.Loading)
     val state: StateFlow<UiState<DetailUiModel>> = _state.asStateFlow()
+    private var loadJob: Job? = null
 
     init {
         if (mediaId <= 0) {
@@ -77,65 +80,80 @@ class DetailViewModel(
             _state.value = UiState.Error("invalid_media")
             return
         }
-        viewModelScope.launch {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             _state.value = UiState.Loading
-            val detailDeferred = async { repo.detail(mediaId) }
-            val linksDeferred = async { repo.outsideLinks(mediaId, initialEpisode) }
-            val detailResult = detailDeferred.await()
-
-            val data = detailResult.getOrElse { err ->
-                _state.value = UiState.Error(err.message ?: "Unknown error")
-                return@launch
-            }
-            if (data.details == null && data.seasons.isEmpty() && data.recommends.isEmpty()) {
-                _state.value = UiState.Error("Not found")
-                return@launch
-            }
-            // Detail chrome first; lines still loading from API (not CDN probe).
-            _state.value = UiState.Success(
-                DetailUiModel(
-                    detail = data,
-                    selectedSeasonIndex = 0,
-                    lines = emptyList(),
-                    selectedLineIndex = 0,
-                    linesStatus = LinesStatus.Checking,
-                ),
-            )
-
-            val linksResult = linksDeferred.await()
-            val raw = linksResult.getOrNull()?.outsideLinks
-                ?.mapNotNull { link ->
-                    val sources = link.list.filter { it.url.isNotBlank() }
-                    if (sources.isEmpty()) null else link.copy(list = sources)
+            var lastError = "Unknown error"
+            repeat(MAX_DETAIL_ATTEMPTS) { attempt ->
+                val result = try {
+                    repo.detail(mediaId)
+                } catch (ce: CancellationException) {
+                    throw ce
+                } catch (t: Throwable) {
+                    Result.failure(t)
                 }
-                .orEmpty()
-            // HaloDrift: show all API lines immediately — do NOT filterAvailable.
-            val status = if (raw.isNotEmpty()) LinesStatus.Ready else LinesStatus.None
-            _state.update { current ->
-                if (current is UiState.Success) {
-                    current.copy(
-                        data = current.data.copy(
-                            lines = raw,
-                            selectedLineIndex = 0,
-                            linesStatus = status,
-                            lineProbeOk = List(raw.size) { null },
-                        ),
-                    )
-                } else {
-                    UiState.Success(
+                val data = result.getOrNull()
+                if (data != null &&
+                    (data.details != null || data.seasons.isNotEmpty() || data.recommends.isNotEmpty())
+                ) {
+                    _state.value = UiState.Success(
                         DetailUiModel(
                             detail = data,
-                            lines = raw,
-                            linesStatus = status,
-                            lineProbeOk = List(raw.size) { null },
+                            selectedSeasonIndex = 0,
+                            lines = emptyList(),
+                            selectedLineIndex = 0,
+                            linesStatus = LinesStatus.Checking,
                         ),
                     )
+                    loadLinks()
+                    return@launch
+                }
+                lastError = result.exceptionOrNull()?.message
+                    ?: if (data == null) "Unknown error" else "Not found"
+                if (attempt < MAX_DETAIL_ATTEMPTS - 1) {
+                    delay(DETAIL_RETRY_DELAY_MS)
                 }
             }
+            _state.value = UiState.Error(lastError)
+        }
+    }
 
-            if (enableWeakProbeMarks && raw.isNotEmpty()) {
-                launchWeakMarks(raw)
+    /** Lines load after detail success; their failure must not hide the detail mask. */
+    private suspend fun loadLinks() {
+        val linksResult = try {
+            repo.outsideLinks(mediaId, initialEpisode)
+        } catch (ce: CancellationException) {
+            throw ce
+        } catch (t: Throwable) {
+            Result.failure(t)
+        }
+        val raw = linksResult
+            .getOrNull()
+            ?.outsideLinks
+            ?.mapNotNull { link ->
+                val sources = link.list.filter { it.url.isNotBlank() }
+                if (sources.isEmpty()) null else link.copy(list = sources)
             }
+            .orEmpty()
+        // HaloDrift: show all API lines immediately — do NOT filterAvailable.
+        val status = if (raw.isNotEmpty()) LinesStatus.Ready else LinesStatus.None
+        _state.update { current ->
+            if (current is UiState.Success) {
+                current.copy(
+                    data = current.data.copy(
+                        lines = raw,
+                        selectedLineIndex = 0,
+                        linesStatus = status,
+                        lineProbeOk = List(raw.size) { null },
+                    ),
+                )
+            } else {
+                current
+            }
+        }
+
+        if (enableWeakProbeMarks && raw.isNotEmpty()) {
+            launchWeakMarks(raw)
         }
     }
 
@@ -192,6 +210,9 @@ class DetailViewModel(
     }
 
     companion object {
+        private const val MAX_DETAIL_ATTEMPTS = 10
+        private const val DETAIL_RETRY_DELAY_MS = 2_000L
+
         fun factory(
             mediaId: Int,
             initialEpisode: Int = 0,

@@ -110,6 +110,8 @@ class PlayerActivity : ComponentActivity() {
     private fun startFullscreenOf(i: Intent = intent): Boolean =
         i.getBooleanExtra(EXTRA_START_FULLSCREEN, false)
     private fun lineIndexOf(i: Intent = intent): Int = i.getIntExtra(EXTRA_LINE_INDEX, 0)
+    private fun startPositionOf(i: Intent = intent): Long =
+        i.getLongExtra(EXTRA_START_POSITION_MS, 0L)
 
 
     private var returnAdConsumed = false
@@ -161,10 +163,11 @@ class PlayerActivity : ComponentActivity() {
         val episode = episodeOf()
         val titleExtra = titleOf()
         val initialLineIndex = lineIndexOf()
+        val initialStartPositionMs = startPositionOf()
         Log.i(
             "PlayerActivity",
             "onCreate mediaId=$mediaId episode=$episode line=$initialLineIndex " +
-                "title=${titleExtra.take(40)} intent=$intent",
+                "startMs=$initialStartPositionMs title=${titleExtra.take(40)} intent=$intent",
         )
         if (startFullscreenOf() && savedInstanceState == null) {
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
@@ -278,6 +281,7 @@ class PlayerActivity : ComponentActivity() {
                                 mediaId = currentMediaId,
                                 detailMeta = detailMeta,
                                 currentEpisode = currentEpisode,
+                                startPositionMs = initialStartPositionMs,
                                 onBack = { attemptReturnAdThenFinish() },
                                 onSelectLine = viewModel::selectLine,
                                 onSelectSource = viewModel::selectSource,
@@ -335,6 +339,7 @@ class PlayerActivity : ComponentActivity() {
         const val EXTRA_TITLE = "EXTRA_TITLE"
         const val EXTRA_START_FULLSCREEN = "EXTRA_START_FULLSCREEN"
         const val EXTRA_LINE_INDEX = "EXTRA_LINE_INDEX"
+        const val EXTRA_START_POSITION_MS = "EXTRA_START_POSITION_MS"
 
         fun createIntent(
             context: Context,
@@ -343,12 +348,14 @@ class PlayerActivity : ComponentActivity() {
             title: String = "",
             startFullscreen: Boolean = false,
             lineIndex: Int = 0,
+            startPositionMs: Long = 0L,
         ): Intent = Intent(context, PlayerActivity::class.java).apply {
             putExtra(EXTRA_MEDIA_ID, mediaId)
             putExtra(EXTRA_EPISODE, episode)
             putExtra(EXTRA_TITLE, title)
             putExtra(EXTRA_START_FULLSCREEN, startFullscreen)
             putExtra(EXTRA_LINE_INDEX, lineIndex)
+            putExtra(EXTRA_START_POSITION_MS, startPositionMs)
         }
     }
 }
@@ -471,6 +478,7 @@ private fun PlayerContent(
     mediaId: Int,
     detailMeta: PlayerDetailMeta?,
     currentEpisode: Int,
+    startPositionMs: Long = 0L,
     onBack: () -> Unit,
     onSelectLine: (Int) -> Unit,
     onSelectSource: (Int) -> Unit,
@@ -512,6 +520,7 @@ private fun PlayerContent(
     var lastHistoryWriteAt by remember { mutableLongStateOf(0L) }
     var initialHistoryWritten by remember { mutableStateOf(false) }
     var playerEverReady by remember { mutableStateOf(false) }
+    var initialSeekApplied by remember { mutableStateOf(false) }
     val titleLatest = rememberUpdatedState(title)
     val detailMetaLatest = rememberUpdatedState(detailMeta)
     val episodeLatest = rememberUpdatedState(currentEpisode)
@@ -618,7 +627,12 @@ private fun PlayerContent(
         val readyGate = playerEverReady
         val progressGate = isPlaying && positionMs >= 5_000L
         if (readyGate || progressGate) {
-            writeWatchHistory(force = true, posMs = positionMs, durMs = durationMs)
+            // Read the player directly: the resume seek happens in STATE_READY before
+            // the 500ms position ticker updates positionMs, so using the state here
+            // would overwrite the resumed history with 00:00.
+            val pos = if (readyGate) player.currentPosition.coerceAtLeast(0L) else positionMs
+            val dur = player.duration.takeIf { it > 0L } ?: durationMs
+            writeWatchHistory(force = true, posMs = pos, durMs = dur)
             initialHistoryWritten = true
         }
     }
@@ -660,6 +674,19 @@ private fun PlayerContent(
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == Player.STATE_READY && successOnce.compareAndSet(false, true)) {
+                    if (!initialSeekApplied) {
+                        initialSeekApplied = true
+                        if (startPositionMs > 0L) {
+                            val duration = player.duration
+                            val target = if (duration > 0L) {
+                                startPositionMs.coerceAtMost(duration)
+                            } else {
+                                startPositionMs
+                            }
+                            player.seekTo(target)
+                            Log.i("PlayerActivity", "initial resume seek to ${target}ms")
+                        }
+                    }
                     applySubtitleTracks(subtitleOn)
                     onReadyLatest.value()
                 }

@@ -77,4 +77,6 @@
     <string name="my_settings_body">Settings coming soon.</string>
     <string name="my_other">Other</string>
     <string name="more_chevron">More</string>
+    <string name="resume_progress">Resume · %1$s</string>
+    <string name="quick_resume_dismiss">Dismiss quick resume</string>
 </resources>

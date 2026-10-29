@@ -54,27 +54,9 @@
       "hd_nodes": [
         {
           "hd_platform": "admob",
-          "hd_format": "native",
-          "hd_id": "ca-app-pub-3940256099942544/2247696110",
-          "hd_priority": 1
-        },
-        {
-          "hd_platform": "admob",
-          "hd_format": "native",
-          "hd_id": "ca-app-pub-3940256099942544/2247696110",
-          "hd_priority": 2
-        },
-        {
-          "hd_platform": "admob",
-          "hd_format": "native",
-          "hd_id": "ca-app-pub-3940256099942544/2247696110",
-          "hd_priority": 3
-        },
-        {
-          "hd_platform": "admob",
           "hd_format": "launch_screen",
           "hd_id": "ca-app-pub-3940256099942544/9257395921",
-          "hd_priority": 4
+          "hd_priority": 1
         }
       ]
     },
