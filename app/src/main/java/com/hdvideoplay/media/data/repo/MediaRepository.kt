@@ -1,0 +1,120 @@
+package com.hdvideoplay.media.data.repo
+
+import com.hdvideoplay.media.data.api.MediaApi
+import com.hdvideoplay.media.data.api.NetworkModule
+import com.hdvideoplay.media.data.dto.ApiResult
+import com.hdvideoplay.media.data.dto.DetailResponseDto
+import com.hdvideoplay.media.data.dto.OutsideLinksResponseDto
+import com.hdvideoplay.media.data.dto.PlayReportBody
+import com.hdvideoplay.media.data.dto.FilterOptionsDto
+import com.hdvideoplay.media.data.dto.HomeModuleDto
+import com.hdvideoplay.media.data.dto.MediaItemDto
+import com.hdvideoplay.media.data.dto.PagedResultsDto
+import com.hdvideoplay.media.data.dto.StreamEntryDto
+import com.hdvideoplay.media.data.dto.StreamingPlatformDto
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.decodeFromJsonElement
+
+class MediaRepository(
+    private val api: MediaApi = NetworkModule.api,
+    private val json: Json = NetworkModule.json,
+) {
+    suspend fun homeData(language: String = "en"): Result<List<HomeModuleDto>> =
+        decodeList(api.homeData(language))
+
+    suspend fun homeStreamData(): Result<List<StreamEntryDto>> =
+        decodeList(api.homeStreamData())
+
+    suspend fun moduleData(id: Int, language: String = "en", page: Int = 1): Result<List<MediaItemDto>> =
+        decodeList(api.moduleData(id, language, page))
+
+    suspend fun search(keyword: String, page: Int = 1): Result<PagedResultsDto> =
+        decodeObject(api.search(keyword = keyword, page = page), PagedResultsDto())
+
+    suspend fun filterOptions(): Result<FilterOptionsDto> =
+        decodeObject(api.filterOptions(), FilterOptionsDto())
+
+    suspend fun discover(
+        category: Int = 1,
+        genre: String? = null,
+        releaseYear: String? = null,
+        country: String? = null,
+        page: Int = 1,
+    ): Result<PagedResultsDto> = decodeObject(
+        api.discover(
+            category = category,
+            genre = genre,
+            releaseYear = releaseYear,
+            country = country,
+            page = page,
+        ),
+        PagedResultsDto(),
+    )
+
+    suspend fun streaming(): Result<List<StreamingPlatformDto>> =
+        decodeList(api.streaming())
+
+    suspend fun daily(dailyStyle: String = "2"): Result<List<MediaItemDto>> =
+        decodeList(api.daily(dailyStyle))
+
+
+    suspend fun detail(mediaId: Int, language: String = "en"): Result<DetailResponseDto> =
+        decodeObject(api.detail(mediaId, language), DetailResponseDto())
+
+    suspend fun outsideLinks(
+        mediaId: Int,
+        episode: Int,
+        language: String = "en",
+    ): Result<OutsideLinksResponseDto> =
+        decodeObject(api.outsideLinks(mediaId, episode, language), OutsideLinksResponseDto())
+
+    /**
+     * Play report must never break the playback path.
+     * Failures are swallowed into Result.failure for optional logging.
+     */
+    suspend fun playReport(body: PlayReportBody): Result<Unit> = try {
+        val result = api.playReport(body)
+        if (result.isSuccess) Result.success(Unit)
+        else Result.failure(ApiException(result.code, result.msg))
+    } catch (t: Throwable) {
+        Result.failure(t)
+    }
+
+    private inline fun <reified T> decodeList(result: ApiResult): Result<List<T>> = try {
+        if (!result.isSuccess) {
+            Result.failure(ApiException(result.code, result.msg))
+        } else {
+            val element = result.data
+            when {
+                element == null || element is JsonNull -> Result.success(emptyList())
+                element is JsonPrimitive && element.content.isBlank() -> Result.success(emptyList())
+                element is JsonArray -> Result.success(json.decodeFromJsonElement<List<T>>(element))
+                else -> Result.success(emptyList())
+            }
+        }
+    } catch (t: Throwable) {
+        Result.failure(t)
+    }
+
+    private inline fun <reified T> decodeObject(result: ApiResult, empty: T): Result<T> = try {
+        if (!result.isSuccess) {
+            Result.failure(ApiException(result.code, result.msg))
+        } else {
+            val element = result.data
+            when {
+                element == null || element is JsonNull -> Result.success(empty)
+                element is JsonPrimitive -> Result.success(empty)
+                element is JsonObject -> Result.success(json.decodeFromJsonElement(element))
+                else -> Result.success(empty)
+            }
+        }
+    } catch (t: Throwable) {
+        Result.failure(t)
+    }
+}
+
+class ApiException(val code: String, message: String) : Exception("API $code: $message")

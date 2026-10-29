@@ -1,0 +1,22 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="28dp"
+    android:height="28dp"
+    android:viewportWidth="28"
+    android:viewportHeight="28">
+    <!-- HaloDrift-like: open ring + arrowhead; label "15s" drawn in Compose below -->
+    <path
+        android:pathData="M14,4.5c-5.247,0 -9.5,4.253 -9.5,9.5c0,3.1 1.49,5.85 3.78,7.58"
+        android:strokeWidth="2.2"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"/>
+    <path
+        android:pathData="M14,4.5c5.247,0 9.5,4.253 9.5,9.5"
+        android:strokeWidth="2.2"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"/>
+    <path
+        android:pathData="M14,4.5 L10.8,2.2 L10.8,6.8 Z"
+        android:fillColor="#FFFFFFFF"/>
+</vector>

@@ -1,0 +1,229 @@
+{
+  "code": 1,
+  "msg": "success",
+  "data": {
+    "outside_links": [
+      {
+        "list": [
+          {
+            "id": 38927160,
+            "url": "https://bcdn.hakunaymatata.com/resource/dcda2b419fdf44f6d70feaed11670eed.mp4?sign=054c1a6268bf5215e84d9ebedba778a3&t=1792424446",
+            "headers": {
+              "accept": "*/*",
+              "user-agent": "com.community.mbox.in.geobypass (Linux; Android)"
+            },
+            "quality": "720p Origin",
+            "subtitles": [
+              {
+                "id": 705423,
+                "lang": "en",
+                "format": "srt",
+                "language": "English",
+                "actual_url": "https://nts.kadoyaparallelsister.cc/4f/ac/4fac6c86a7e34ac919775dc213449090",
+                "request_headers": {}
+              },
+              {
+                "id": 705424,
+                "lang": "en",
+                "format": "srt",
+                "language": "English",
+                "actual_url": "https://nts.kadoyaparallelsister.cc/4c/da/4cda3a31975dc8fd10a972491ac6874e",
+                "request_headers": {}
+              }
+            ],
+            "proportion": ""
+          },
+          {
+            "id": 38927161,
+            "url": "https://bcdn.hakunaymatata.com/resource/b958e5628a48ddd2e9ee6902ab1fdc93.mp4?sign=5c12b7b874c1b24aa89cd80c9770a208&t=1792424448",
+            "headers": {
+              "accept": "*/*",
+              "user-agent": "com.community.mbox.in.geobypass (Linux; Android)"
+            },
+            "quality": "720p \u00b7 Spanish dub ES",
+            "subtitles": [
+              {
+                "id": 705423,
+                "lang": "en",
+                "format": "srt",
+                "language": "English",
+                "actual_url": "https://nts.kadoyaparallelsister.cc/4f/ac/4fac6c86a7e34ac919775dc213449090",
+                "request_headers": {}
+              },
+              {
+                "id": 705424,
+                "lang": "en",
+                "format": "srt",
+                "language": "English",
+                "actual_url": "https://nts.kadoyaparallelsister.cc/4c/da/4cda3a31975dc8fd10a972491ac6874e",
+                "request_headers": {}
+              }
+            ],
+            "proportion": ""
+          }
+        ],
+        "name": "Line 9",
+        "audio_type": "original",
+        "has_multiple_source": false,
+        "has_multiple_quality": true
+      },
+      {
+        "list": [
+          {
+            "id": 37908500,
+            "url": "https://bcdnt.hakunaymatata.com/resource/dcda2b419fdf44f6d70feaed11670eed.mp4?sign=20a47b1e025942f09e3a80b8e69cf5e8&t=1792424434",
+            "headers": {
+              "accept": "*/*",
+              "user-agent": "com.community.mbox.in.geobypass (Linux; Android)"
+            },
+            "quality": "720p",
+            "subtitles": [
+              {
+                "id": 705423,
+                "lang": "en",
+                "format": "srt",
+                "language": "English",
+                "actual_url": "https://nts.kadoyaparallelsister.cc/4f/ac/4fac6c86a7e34ac919775dc213449090",
+                "request_headers": {}
+              },
+              {
+                "id": 705424,
+                "lang": "en",
+                "format": "srt",
+                "language": "English",
+                "actual_url": "https://nts.kadoyaparallelsister.cc/4c/da/4cda3a31975dc8fd10a972491ac6874e",
+                "request_headers": {}
+              }
+            ],
+            "proportion": ""
+          }
+        ],
+        "name": "Line 10",
+        "audio_type": "original",
+        "has_multiple_source": false,
+        "has_multiple_quality": false
+      },
+      {
+        "list": [
+          {
+            "id": 23512309,
+            "url": "https://bcdnxw.hakunaymatata.com/resource/dcda2b419fdf44f6d70feaed11670eed.mp4?sign=4c717d638c53c6f8b96b713d4ff7e482&t=1779927804",
+            "headers": {
+              "accept": "*/*",
+              "origin": "https://vidlux.site",
+              "referer": "https://vidlux.site/embed/movie/20285?color=3b82f6",
+              "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+            },
+            "quality": "720p",
+            "subtitles": [
+              {
+                "id": 317393905,
+                "lang": "English",
+                "format": "vtt",
+                "language": "english",
+                "actual_url": "https://cache.vdrk.site/v1/vtt/movie/20285/English.vtt",
+                "request_headers": {
+                  "accept": "*/*",
+                  "origin": "https://vidlux.site",
+                  "referer": "https://vidlux.site/embed/movie/20285?color=3b82f6",
+                  "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+                }
+              },
+              {
+                "id": 317393906,
+                "lang": "English2",
+                "format": "vtt",
+                "language": "english2",
+                "actual_url": "https://cache.vdrk.site/v1/vtt/movie/20285/English2.vtt",
+                "request_headers": {
+                  "accept": "*/*",
+                  "origin": "https://vidlux.site",
+                  "referer": "https://vidlux.site/embed/movie/20285?color=3b82f6",
+                  "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+                }
+              },
+              {
+                "id": 705423,
+                "lang": "en",
+                "format": "srt",
+                "language": "English",
+                "actual_url": "https://nts.kadoyaparallelsister.cc/4f/ac/4fac6c86a7e34ac919775dc213449090",
+                "request_headers": {}
+              },
+              {
+                "id": 317393907,
+                "lang": "Italian",
+                "format": "vtt",
+                "language": "italian",
+                "actual_url": "https://cache.vdrk.site/v1/vtt/movie/20285/Italian.vtt",
+                "request_headers": {
+                  "accept": "*/*",
+                  "origin": "https://vidlux.site",
+                  "referer": "https://vidlux.site/embed/movie/20285?color=3b82f6",
+                  "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+                }
+              },
+              {
+                "id": 317393910,
+                "lang": "Russian",
+                "format": "vtt",
+                "language": "russian",
+                "actual_url": "https://cache.vdrk.site/v1/vtt/movie/20285/Russian.vtt",
+                "request_headers": {
+                  "accept": "*/*",
+                  "origin": "https://vidlux.site",
+                  "referer": "https://vidlux.site/embed/movie/20285?color=3b82f6",
+                  "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+                }
+              },
+              {
+                "id": 317393909,
+                "lang": "Polish",
+                "format": "vtt",
+                "language": "polish",
+                "actual_url": "https://cache.vdrk.site/v1/vtt/movie/20285/Polish.vtt",
+                "request_headers": {
+                  "accept": "*/*",
+                  "origin": "https://vidlux.site",
+                  "referer": "https://vidlux.site/embed/movie/20285?color=3b82f6",
+                  "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+                }
+              },
+              {
+                "id": 317393908,
+                "lang": "Norwegian",
+                "format": "vtt",
+                "language": "norwegian",
+                "actual_url": "https://cache.vdrk.site/v1/vtt/movie/20285/Norwegian.vtt",
+                "request_headers": {
+                  "accept": "*/*",
+                  "origin": "https://vidlux.site",
+                  "referer": "https://vidlux.site/embed/movie/20285?color=3b82f6",
+                  "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+                }
+              },
+              {
+                "id": 317393904,
+                "lang": "Bulgarian",
+                "format": "vtt",
+                "language": "bulgarian",
+                "actual_url": "https://cache.vdrk.site/v1/vtt/movie/20285/Bulgarian.vtt",
+                "request_headers": {
+                  "accept": "*/*",
+                  "origin": "https://vidlux.site",
+                  "referer": "https://vidlux.site/embed/movie/20285?color=3b82f6",
+                  "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+                }
+              }
+            ],
+            "proportion": ""
+          }
+        ],
+        "name": "Line 8",
+        "audio_type": "original",
+        "has_multiple_source": false,
+        "has_multiple_quality": false
+      }
+    ]
+  }
+}

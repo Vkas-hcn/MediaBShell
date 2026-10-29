@@ -1,0 +1,142 @@
+{
+  "hd_load_scenes": [
+    {
+      "hd_load_scene": "cold_open_a",
+      "hd_refill_on_consume": false,
+      "hd_nodes": [
+        {
+          "hd_platform": "admob",
+          "hd_format": "launch_screen",
+          "hd_id": "ca-app-pub-1725671068291893/6411195714",
+          "hd_priority": 1
+        },
+        {
+          "hd_platform": "admob",
+          "hd_format": "launch_screen",
+          "hd_id": "ca-app-pub-1725671068291893/9584153961",
+          "hd_priority": 2
+        }
+      ]
+    },
+    {
+      "hd_load_scene": "cold_open",
+      "hd_refill_on_consume": false,
+      "hd_nodes": [
+        {
+          "hd_platform": "admob",
+          "hd_format": "native",
+          "hd_id": "ca-app-pub-1725671068291893/5644908959",
+          "hd_priority": 1
+        },
+        {
+          "hd_platform": "admob",
+          "hd_format": "native",
+          "hd_id": "ca-app-pub-1725671068291893/4331827280",
+          "hd_priority": 2
+        },
+        {
+          "hd_platform": "admob",
+          "hd_format": "native",
+          "hd_id": "ca-app-pub-1725671068291893/3085982192",
+          "hd_priority": 3
+        },
+        {
+          "hd_platform": "admob",
+          "hd_format": "launch_screen",
+          "hd_id": "ca-app-pub-1725671068291893/8271072293",
+          "hd_priority": 4
+        }
+      ]
+    },
+    {
+      "hd_load_scene": "hot_open",
+      "hd_refill_on_consume": true,
+      "hd_nodes": [
+        {
+          "hd_platform": "admob",
+          "hd_format": "native",
+          "hd_id": "ca-app-pub-1725671068291893/6634556992",
+          "hd_priority": 1
+        },
+        {
+          "hd_platform": "admob",
+          "hd_format": "native",
+          "hd_id": "ca-app-pub-1725671068291893/4008393659",
+          "hd_priority": 2
+        },
+        {
+          "hd_platform": "admob",
+          "hd_format": "native",
+          "hd_id": "ca-app-pub-1725671068291893/8079500607",
+          "hd_priority": 3
+        },
+        {
+          "hd_platform": "admob",
+          "hd_format": "launch_screen",
+          "hd_id": "ca-app-pub-1725671068291893/2390305639",
+          "hd_priority": 4
+        }
+      ]
+    },
+    {
+      "hd_load_scene": "normal_1",
+      "hd_refill_on_consume": true,
+      "hd_nodes": [
+        {
+          "hd_platform": "admob",
+          "hd_format": "native",
+          "hd_id": "ca-app-pub-1725671068291893/5453337267",
+          "hd_priority": 1
+        },
+        {
+          "hd_platform": "admob",
+          "hd_format": "native",
+          "hd_id": "ca-app-pub-1725671068291893/2894410507",
+          "hd_priority": 2
+        },
+        {
+          "hd_platform": "admob",
+          "hd_format": "native",
+          "hd_id": "ca-app-pub-1725671068291893/2827173922",
+          "hd_priority": 3
+        },
+        {
+          "hd_platform": "admob",
+          "hd_format": "native",
+          "hd_id": "ca-app-pub-1725671068291893/1514092250",
+          "hd_priority": 4
+        }
+      ]
+    },
+    {
+      "hd_load_scene": "normal_2",
+      "hd_refill_on_consume": true,
+      "hd_nodes": [
+        {
+          "hd_platform": "admob",
+          "hd_format": "native",
+          "hd_id": "ca-app-pub-1725671068291893/7756066979",
+          "hd_priority": 1
+        },
+        {
+          "hd_platform": "admob",
+          "hd_format": "native",
+          "hd_id": "ca-app-pub-1725671068291893/6442985305",
+          "hd_priority": 2
+        },
+        {
+          "hd_platform": "admob",
+          "hd_format": "native",
+          "hd_id": "ca-app-pub-1725671068291893/6574847240",
+          "hd_priority": 3
+        },
+        {
+          "hd_platform": "admob",
+          "hd_format": "native",
+          "hd_id": "ca-app-pub-1725671068291893/6110978664",
+          "hd_priority": 4
+        }
+      ]
+    }
+  ]
+}

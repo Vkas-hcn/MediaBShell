@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#07090E</color>
+    <color name="brand_gold">#FFB800</color>
+    <color name="page_bg">#07090E</color>
+    <color name="tab_bar_bg">#0A0D14</color>
+    <color name="primary_text">#FFFFFF</color>
+    <color name="poster_title">#E2E8F0</color>
+    <color name="muted_text">#94A3B8</color>
+    <color name="splash_track">#527C8CAE</color>
+</resources>

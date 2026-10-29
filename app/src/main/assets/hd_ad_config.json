@@ -1,0 +1,8 @@
+{
+  "hd_ad_interval": 60,
+  "hd_play_interval": 600,
+  "hd_close_area": 24,
+  "hd_native_close_percent": 10,
+  "hd_node_timeout_sec": 30,
+  "hd_cache_ttl_sec": 14400
+}

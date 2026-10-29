@@ -1,0 +1,661 @@
+package com.hdvideoplay.media.ui.player
+
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.FullscreenExit
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.hdvideoplay.media.R
+import com.hdvideoplay.media.ui.theme.NetflixRed
+import java.util.Locale
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.delay
+
+data class PlayerControlsState(
+    val title: String = "",
+    val isPlaying: Boolean = false,
+    val positionMs: Long = 0L,
+    val durationMs: Long = 0L,
+    val bufferedMs: Long = 0L,
+    val subtitleOn: Boolean = false,
+    val locked: Boolean = false,
+    val autoLabel: String = "AUTO",
+    val subtitleText: String? = null,
+)
+
+/**
+ * Shared player chrome: tap surface toggles visibility; idle auto-hides.
+ * Brand red ONLY on the center play/pause primary button.
+ * V6 §1 icons + §7 compact sizes.
+ */
+@Composable
+fun PlayerControlsHost(
+    landscape: Boolean,
+    state: PlayerControlsState,
+    onBack: () -> Unit,
+    onTogglePlay: () -> Unit,
+    onSeekBack15: () -> Unit,
+    onSeekForward15: () -> Unit,
+    onSeek: (Long) -> Unit,
+    onToggleCc: () -> Unit = {},
+    onAuto: () -> Unit = {},
+    onFullscreen: () -> Unit = {},
+    onExitFullscreen: () -> Unit = {},
+    onToggleLock: () -> Unit = {},
+    idleHideMs: Long = 3200L,
+    modifier: Modifier = Modifier,
+) {
+    var controlsVisible by remember { mutableStateOf(true) }
+    var hideToken by remember { mutableLongStateOf(0L) }
+
+    fun bumpVisible() {
+        controlsVisible = true
+        hideToken++
+    }
+
+    LaunchedEffect(hideToken, state.isPlaying, state.locked) {
+        if (!controlsVisible) return@LaunchedEffect
+        if (state.locked) return@LaunchedEffect
+        delay(idleHideMs)
+        if (state.isPlaying) {
+            controlsVisible = false
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .clickable(
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() },
+            ) {
+                if (state.locked) {
+                    controlsVisible = !controlsVisible
+                    hideToken++
+                } else {
+                    controlsVisible = !controlsVisible
+                    if (controlsVisible) hideToken++
+                }
+            },
+    ) {
+        val sub = state.subtitleText
+        if (!sub.isNullOrBlank()) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = if (landscape) 72.dp else 56.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(Color(0x99000000))
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+            ) {
+                Text(text = sub, color = Color.White, fontSize = 14.sp)
+            }
+        }
+
+        AnimatedVisibility(
+            visible = controlsVisible,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            if (landscape) {
+                LandscapeControls(
+                    state = state,
+                    onBack = onBack,
+                    onTogglePlay = { bumpVisible(); onTogglePlay() },
+                    onSeekBack15 = { bumpVisible(); onSeekBack15() },
+                    onSeekForward15 = { bumpVisible(); onSeekForward15() },
+                    onSeek = { bumpVisible(); onSeek(it) },
+                    onToggleCc = { bumpVisible(); onToggleCc() },
+                    onAuto = { bumpVisible(); onAuto() },
+                    onExitFullscreen = onExitFullscreen,
+                    onToggleLock = { bumpVisible(); onToggleLock() },
+                )
+            } else {
+                PortraitControls(
+                    state = state,
+                    onBack = onBack,
+                    onTogglePlay = { bumpVisible(); onTogglePlay() },
+                    onSeekBack15 = { bumpVisible(); onSeekBack15() },
+                    onSeekForward15 = { bumpVisible(); onSeekForward15() },
+                    onSeek = { bumpVisible(); onSeek(it) },
+                    onToggleCc = { bumpVisible(); onToggleCc() },
+                    onAuto = { bumpVisible(); onAuto() },
+                    onFullscreen = onFullscreen,
+                )
+            }
+        }
+
+        if (state.locked && controlsVisible) {
+            IconButton(
+                onClick = { bumpVisible(); onToggleLock() },
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 12.dp)
+                    .size(36.dp)
+                    .background(Color(0x66000000), CircleShape),
+            ) {
+                Icon(
+                    Icons.Default.Lock,
+                    contentDescription = "Unlock",
+                    tint = Color.White,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompactIconButton(
+    onClick: () -> Unit,
+    contentDescription: String,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    IconButton(
+        onClick = onClick,
+        modifier = modifier.size(36.dp),
+    ) {
+        content()
+    }
+}
+
+@Composable
+private fun CcButton(subtitleOn: Boolean, onClick: () -> Unit) {
+    CompactIconButton(onClick = onClick, contentDescription = "CC") {
+        Icon(
+            painter = painterResource(R.drawable.ic_cc_outline),
+            contentDescription = "CC",
+            tint = if (subtitleOn) Color.White else Color(0xFFB3B3B3),
+            modifier = Modifier.size(width = 22.dp, height = 16.dp),
+        )
+    }
+}
+
+@Composable
+private fun PortraitControls(
+    state: PlayerControlsState,
+    onBack: () -> Unit,
+    onTogglePlay: () -> Unit,
+    onSeekBack15: () -> Unit,
+    onSeekForward15: () -> Unit,
+    onSeek: (Long) -> Unit,
+    onToggleCc: () -> Unit,
+    onAuto: () -> Unit,
+    onFullscreen: () -> Unit,
+) {
+    Box(Modifier.fillMaxSize()) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Color(0x88000000), Color.Transparent, Color(0xAA000000)),
+                    ),
+                ),
+        )
+
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .align(Alignment.TopCenter)
+                .padding(horizontal = 2.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CompactIconButton(onClick = onBack, contentDescription = "Back") {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            AutoChip(label = state.autoLabel, onClick = onAuto)
+            CcButton(subtitleOn = state.subtitleOn, onClick = onToggleCc)
+        }
+
+        Row(
+            Modifier.align(Alignment.Center),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(18.dp), // design §B: 16–20dp
+        ) {
+            Seek15Button(forward = false, onClick = onSeekBack15)
+            PrimaryPlayPause(isPlaying = state.isPlaying, onClick = onTogglePlay)
+            Seek15Button(forward = true, onClick = onSeekForward15)
+        }
+
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .align(Alignment.BottomCenter)
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+        ) {
+            PortraitProgressRow(
+                state = state,
+                onSeek = onSeek,
+                onTogglePlay = onTogglePlay,
+                onFullscreen = onFullscreen,
+            )
+        }
+    }
+}
+
+@Composable
+private fun LandscapeControls(
+    state: PlayerControlsState,
+    onBack: () -> Unit,
+    onTogglePlay: () -> Unit,
+    onSeekBack15: () -> Unit,
+    onSeekForward15: () -> Unit,
+    onSeek: (Long) -> Unit,
+    onToggleCc: () -> Unit,
+    onAuto: () -> Unit,
+    onExitFullscreen: () -> Unit,
+    onToggleLock: () -> Unit,
+) {
+    if (state.locked) {
+        return
+    }
+    Box(Modifier.fillMaxSize()) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Color(0x88000000), Color.Transparent, Color(0xAA000000)),
+                    ),
+                ),
+        )
+
+        // Top: back + title (ellipsis) | CC — CC must stay on-screen (§7.2 B)
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .align(Alignment.TopCenter)
+                .padding(horizontal = 4.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CompactIconButton(onClick = onBack, contentDescription = "Back") {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            Text(
+                text = state.title,
+                color = Color.White,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 4.dp),
+            )
+            CcButton(subtitleOn = state.subtitleOn, onClick = onToggleCc)
+        }
+
+        CompactIconButton(
+            onClick = onToggleLock,
+            contentDescription = "Lock",
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 6.dp),
+        ) {
+            Icon(
+                Icons.Default.LockOpen,
+                contentDescription = "Lock",
+                tint = Color.White,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+
+        Row(
+            Modifier.align(Alignment.Center),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(18.dp), // design §B: 16–20dp
+        ) {
+            Seek15Button(forward = false, onClick = onSeekBack15)
+            PrimaryPlayPause(isPlaying = state.isPlaying, onClick = onTogglePlay)
+            Seek15Button(forward = true, onClick = onSeekForward15)
+        }
+
+        // 08-style: progress row (times at ends) + next row MiniPause | AUTO+exit
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .align(Alignment.BottomCenter)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+        ) {
+            LandscapeProgressBlock(
+                state = state,
+                onSeek = onSeek,
+                onTogglePlay = onTogglePlay,
+                onAuto = onAuto,
+                onExitFullscreen = onExitFullscreen,
+            )
+        }
+    }
+}
+
+@Composable
+private fun PrimaryPlayPause(isPlaying: Boolean, onClick: () -> Unit) {
+    // V6 §7.1: red primary 52dp (only red control)
+    Box(
+        modifier = Modifier
+            .size(52.dp)
+            .clip(CircleShape)
+            .background(NetflixRed)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+            contentDescription = if (isPlaying) "Pause" else "Play",
+            tint = Color.White,
+            modifier = Modifier.size(28.dp),
+        )
+    }
+}
+
+@Composable
+private fun Seek15Button(forward: Boolean, onClick: () -> Unit) {
+    // Design §B: Column(环 28dp + 「15s」10sp SemiBold 白); touch ≤40dp
+    Column(
+        modifier = Modifier
+            .width(40.dp)
+            .height(40.dp)
+            .clickable(
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() },
+                onClick = onClick,
+            ),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Icon(
+            painter = painterResource(
+                if (forward) R.drawable.ic_seek_forward_15 else R.drawable.ic_seek_back_15,
+            ),
+            contentDescription = if (forward) "+15s" else "-15s",
+            tint = Color.White,
+            modifier = Modifier.size(28.dp),
+        )
+        Text(
+            text = "15s",
+            color = Color.White,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            lineHeight = 10.sp,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
+private fun AutoChip(label: String, onClick: () -> Unit) {
+    Text(
+        text = label,
+        color = Color.White,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier
+            .height(22.dp)
+            .clip(RoundedCornerShape(4.dp))
+            .background(Color(0x55FFFFFF))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+    )
+}
+
+@Composable
+private fun MiniPlayPause(isPlaying: Boolean, onClick: () -> Unit) {
+    // Bottom aux Pause/Play — white, 16–18dp, NOT red (§1.4 / §7.1)
+    Box(
+        modifier = Modifier
+            .size(32.dp)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+            contentDescription = if (isPlaying) "Pause" else "Play",
+            tint = Color.White,
+            modifier = Modifier.size(17.dp),
+        )
+    }
+}
+
+@Composable
+private fun PortraitProgressRow(
+    state: PlayerControlsState,
+    onSeek: (Long) -> Unit,
+    onTogglePlay: () -> Unit,
+    onFullscreen: () -> Unit,
+) {
+    val duration = state.durationMs.coerceAtLeast(0L)
+    val position = state.positionMs.coerceIn(0L, duration.coerceAtLeast(1L))
+    val progress = if (duration > 0) position.toFloat() / duration.toFloat() else 0f
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        MiniPlayPause(isPlaying = state.isPlaying, onClick = onTogglePlay)
+        // design §B: 时码竖 10sp；widthIn 不裁（禁死宽 48）
+        Text(
+            formatTime(position),
+            color = Color.White,
+            fontSize = 10.sp,
+            maxLines = 1,
+            softWrap = false,
+            modifier = Modifier.widthIn(min = 36.dp),
+        )
+        ThinSeekSlider(
+            progress = progress,
+            onSeekFraction = { frac ->
+                if (duration > 0) onSeek((frac * duration).toLong())
+            },
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 4.dp),
+        )
+        Text(
+            formatTime(duration),
+            color = Color.White,
+            fontSize = 10.sp,
+            maxLines = 1,
+            softWrap = false,
+            modifier = Modifier.widthIn(min = 36.dp),
+        )
+        CompactIconButton(onClick = onFullscreen, contentDescription = "Fullscreen") {
+            Icon(
+                Icons.Default.Fullscreen,
+                contentDescription = "Fullscreen",
+                tint = Color.White,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+    }
+}
+
+/** 横屏 08：进度单独一行、时码贴两端；下一行左小 Pause、右 AUTO+退出全屏。 */
+@Composable
+private fun LandscapeProgressBlock(
+    state: PlayerControlsState,
+    onSeek: (Long) -> Unit,
+    onTogglePlay: () -> Unit,
+    onAuto: () -> Unit,
+    onExitFullscreen: () -> Unit,
+) {
+    val duration = state.durationMs.coerceAtLeast(0L)
+    val position = state.positionMs.coerceIn(0L, duration.coerceAtLeast(1L))
+    val progress = if (duration > 0) position.toFloat() / duration.toFloat() else 0f
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(
+            formatTime(position),
+            color = Color.White,
+            fontSize = 10.sp,
+            maxLines = 1,
+            softWrap = false,
+            modifier = Modifier.widthIn(min = 36.dp),
+        )
+        ThinSeekSlider(
+            progress = progress,
+            onSeekFraction = { frac ->
+                if (duration > 0) onSeek((frac * duration).toLong())
+            },
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 6.dp),
+        )
+        Text(
+            formatTime(duration),
+            color = Color.White,
+            fontSize = 10.sp,
+            maxLines = 1,
+            softWrap = false,
+            modifier = Modifier.widthIn(min = 36.dp),
+        )
+    }
+    Spacer(Modifier.height(4.dp))
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        MiniPlayPause(isPlaying = state.isPlaying, onClick = onTogglePlay)
+        Spacer(Modifier.weight(1f))
+        AutoChip(label = state.autoLabel, onClick = onAuto)
+        CompactIconButton(onClick = onExitFullscreen, contentDescription = "Exit fullscreen") {
+            Icon(
+                Icons.Default.FullscreenExit,
+                contentDescription = "Exit fullscreen",
+                tint = Color.White,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+    }
+}
+
+/** 细白进度 + 小白圆拇指（非 Material 厚轨、非红）。 */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun ThinSeekSlider(
+    progress: Float,
+    onSeekFraction: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val value = progress.coerceIn(0f, 1f)
+    Slider(
+        value = value,
+        onValueChange = { onSeekFraction(it.coerceIn(0f, 1f)) },
+        modifier = modifier.height(20.dp),
+        colors = SliderDefaults.colors(
+            thumbColor = Color.White,
+            activeTrackColor = Color.White,
+            inactiveTrackColor = Color(0x55FFFFFF),
+        ),
+        thumb = {
+            Box(
+                Modifier
+                    .size(8.dp)
+                    .background(Color.White, CircleShape),
+            )
+        },
+        track = { sliderState ->
+            val range = sliderState.valueRange
+            val span = (range.endInclusive - range.start).takeIf { it > 0f } ?: 1f
+            val frac = ((sliderState.value - range.start) / span).coerceIn(0f, 1f)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(20.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(2.dp)
+                        .clip(RoundedCornerShape(1.dp))
+                        .background(Color(0x55FFFFFF))
+                        .align(Alignment.Center),
+                )
+                Box(
+                    Modifier
+                        .fillMaxWidth(frac)
+                        .height(2.dp)
+                        .clip(RoundedCornerShape(1.dp))
+                        .background(Color.White)
+                        .align(Alignment.CenterStart),
+                )
+            }
+        },
+    )
+}
+
+fun formatPlayerTime(ms: Long): String = formatTime(ms)
+
+private fun formatTime(ms: Long): String {
+    val totalSec = TimeUnit.MILLISECONDS.toSeconds(ms.coerceAtLeast(0L))
+    val h = totalSec / 3600
+    val m = (totalSec % 3600) / 60
+    val s = totalSec % 60
+    return if (h > 0) {
+        String.format(Locale.US, "%d:%02d:%02d", h, m, s)
+    } else {
+        String.format(Locale.US, "%02d:%02d", m, s)
+    }
+}
