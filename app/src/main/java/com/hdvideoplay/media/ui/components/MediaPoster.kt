@@ -114,7 +114,7 @@ fun MediaPosterCard(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 4.dp),
+                    .padding(top = 8.dp),
             ) {
                 Text(
                     text = item.title,

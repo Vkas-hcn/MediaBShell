@@ -10,7 +10,7 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.hdvideoplay.media"
+        applicationId = "com.hd.videoplay.media.debug"
         minSdk = 24
         targetSdk = 35
         versionCode = 1

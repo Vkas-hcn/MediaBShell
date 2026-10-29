@@ -1,6 +1,7 @@
 package com.hdvideoplay.media.ui.my
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -29,6 +31,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -92,6 +95,7 @@ fun MyScreen(
                 showProgress = true,
                 onOpen = ::openPlayer,
                 onTitleClick = null,
+                topPadding = 24,
             )
         }
         item(key = "favorites") {
@@ -120,13 +124,14 @@ private fun MyTopBar() {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .height(56.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = stringResource(R.string.nav_my),
             color = VideoPlayTokens.PrimaryText,
-            fontSize = 18.sp,
+            fontSize = 16.sp,
+            lineHeight = 20.sp,
             fontWeight = FontWeight.SemiBold,
         )
     }
@@ -152,6 +157,7 @@ private fun SectionTitle(title: String, onClick: (() -> Unit)? = null) {
             text = title,
             color = VideoPlayTokens.PrimaryText,
             fontSize = 16.sp,
+            lineHeight = 20.sp,
             fontWeight = FontWeight.Medium,
         )
     }
@@ -165,17 +171,20 @@ private fun PosterRowSection(
     showProgress: Boolean,
     onOpen: (WatchProgress) -> Unit,
     onTitleClick: (() -> Unit)?,
+    topPadding: Int = 12,
 ) {
     Column(
         Modifier
             .fillMaxWidth()
-            .padding(top = 12.dp, bottom = 8.dp),
+            .padding(top = topPadding.dp, bottom = 4.dp),
     ) {
         SectionTitle(title = title, onClick = onTitleClick)
         LazyRow(
             contentPadding = PaddingValues(
-                horizontal = VideoPlayDimens.GridInset.dp,
-                vertical = 10.dp,
+                start = VideoPlayDimens.GridInset.dp,
+                top = 12.dp,
+                end = VideoPlayDimens.GridInset.dp,
+                bottom = 0.dp,
             ),
             horizontalArrangement = Arrangement.spacedBy(VideoPlayDimens.GridGap.dp),
             modifier = Modifier.fillMaxWidth(),
@@ -251,7 +260,7 @@ private fun ContinuePoster(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 6.dp),
+                .padding(top = 8.dp),
         )
     }
 }
@@ -266,16 +275,18 @@ private fun OtherMenuCard(
     Column(
         Modifier
             .fillMaxWidth()
-            .padding(top = 8.dp, bottom = 4.dp),
+            .padding(top = 12.dp, bottom = 4.dp),
     ) {
         SectionTitle(title = stringResource(R.string.my_other))
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(12.dp))
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(VideoPlayTokens.SectionCard),
+                .background(Color(0x99121826))
+                .border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(12.dp))
+                .padding(horizontal = 16.dp, vertical = 16.dp),
         ) {
             MyMenuRow(
                 icon = NavIcons.History,
@@ -283,27 +294,41 @@ private fun OtherMenuCard(
                 label = stringResource(R.string.my_history),
                 onClick = onHistory,
             )
+            MenuDivider()
             MyMenuRow(
                 icon = NavIcons.Download,
                 iconTint = Color(0xFF22C55E),
                 label = stringResource(R.string.my_downloads),
                 onClick = onDownloads,
             )
+            MenuDivider()
             MyMenuRow(
                 icon = NavIcons.Settings,
                 iconTint = VideoPlayTokens.AccentGold,
                 label = stringResource(R.string.my_settings),
                 onClick = onSettings,
             )
+            MenuDivider()
             MyMenuRow(
                 icon = NavIcons.About,
                 iconTint = Color(0xFFA855F7),
                 label = stringResource(R.string.my_about),
                 onClick = onAbout,
-                showDivider = false,
             )
         }
     }
+}
+
+@Composable
+private fun MenuDivider() {
+    Spacer(Modifier.height(12.dp))
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(1.dp)
+            .background(Color(0xFF1C1F26)),
+    )
+    Spacer(Modifier.height(12.dp))
 }
 
 @Composable
@@ -312,45 +337,41 @@ private fun MyMenuRow(
     iconTint: Color,
     label: String,
     onClick: () -> Unit,
-    showDivider: Boolean = true,
 ) {
-    Column {
-        Row(
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(32.dp)
+            .clickable(onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(52.dp)
-                .clickable(onClick = onClick)
-                .padding(horizontal = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .size(32.dp)
+                .clip(CircleShape)
+                .background(iconTint.copy(alpha = 0.10f)),
+            contentAlignment = Alignment.Center,
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
                 tint = iconTint,
-                modifier = Modifier.size(22.dp),
-            )
-            Spacer(Modifier.width(14.dp))
-            Text(
-                text = label,
-                color = VideoPlayTokens.PrimaryText,
-                fontSize = 14.sp,
-                modifier = Modifier.weight(1f),
-            )
-            Icon(
-                imageVector = NavIcons.ChevronRight,
-                contentDescription = null,
-                tint = VideoPlayTokens.Muted,
-                modifier = Modifier.size(18.dp),
+                modifier = Modifier.size(20.dp),
             )
         }
-        if (showDivider) {
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(start = 50.dp, end = 14.dp)
-                    .height(0.5.dp)
-                    .background(Color(0x22FFFFFF)),
-            )
-        }
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = label,
+            color = VideoPlayTokens.PosterTitle,
+            fontSize = 14.sp,
+            lineHeight = 18.sp,
+            modifier = Modifier.weight(1f),
+        )
+        Icon(
+            painter = painterResource(R.drawable.ic_chevron_right),
+            contentDescription = null,
+            tint = VideoPlayTokens.Muted,
+            modifier = Modifier.size(16.dp),
+        )
     }
 }

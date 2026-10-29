@@ -30,6 +30,8 @@ object VideoPlayDimens {
     const val PosterRadius = 12
     const val GridInset = 16
     const val GridGap = 13
+    /** Vertical gap between home modules (Lanhu: 16dp). */
+    const val SectionGap = 16
     const val SectionBarWidth = 4
     const val SectionBarHeight = 16
     const val TabBarHeight = 66

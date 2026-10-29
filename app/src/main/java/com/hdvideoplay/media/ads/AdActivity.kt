@@ -7,11 +7,14 @@ import android.os.Bundle
 import android.util.Log
 import android.util.TypedValue
 import android.view.View
+import android.view.ViewGroup
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.google.android.gms.ads.nativead.MediaView
 import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.nativead.NativeAdView
@@ -58,6 +61,7 @@ class AdActivity : ComponentActivity() {
             NativePresentMode.MIDCARD -> R.layout.activity_ad_native
         }
         setContentView(layout)
+        applyStatusBarInsets()
         bindNative(ad)
         shown = true
         Log.i(
@@ -82,6 +86,48 @@ class AdActivity : ComponentActivity() {
                 }
             },
         )
+    }
+
+    /**
+     * Keep the native close / AdChoices area below the status bar while the ad
+     * itself stays edge-to-edge. Without this the close button starts at 12dp
+     * and the status bar eats its touch target on API 35.
+     */
+    private fun applyStatusBarInsets() {
+        val root = findViewById<View>(R.id.ad_root) ?: return
+        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+            val top = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
+            if (presentMode == NativePresentMode.FULLSCREEN) {
+                shiftTopMargin(R.id.ad_close, top, 12)
+                shiftTopMargin(R.id.ad_close_area, top, 12)
+                shiftTopMargin(R.id.ad_badge, top, 10)
+                shiftTopMargin(R.id.ad_choices_container, top, 32)
+            } else {
+                // Midcard already has 60dp root top padding; only lift the close
+                // if that still leaves it inside the status bar touch region.
+                val close = findViewById<View>(R.id.ad_close) ?: return@setOnApplyWindowInsetsListener insets
+                val lp = close.layoutParams as? ViewGroup.MarginLayoutParams
+                    ?: return@setOnApplyWindowInsetsListener insets
+                val minScreenTop = top + dp(8)
+                val current = root.paddingTop + lp.topMargin
+                if (current < minScreenTop) {
+                    lp.topMargin += minScreenTop - current
+                    close.layoutParams = lp
+                }
+            }
+            insets
+        }
+        ViewCompat.requestApplyInsets(root)
+    }
+
+    private fun shiftTopMargin(id: Int, insetTop: Int, baseDp: Int) {
+        val v = findViewById<View>(id) ?: return
+        val lp = v.layoutParams as? ViewGroup.MarginLayoutParams ?: return
+        val target = dp(baseDp) + insetTop
+        if (lp.topMargin != target) {
+            lp.topMargin = target
+            v.layoutParams = lp
+        }
     }
 
     /**

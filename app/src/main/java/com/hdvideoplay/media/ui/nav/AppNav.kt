@@ -3,7 +3,12 @@ package com.hdvideoplay.media.ui.nav
 import android.app.Activity
 import android.net.Uri
 import android.util.Log
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
@@ -28,6 +33,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -146,12 +152,12 @@ fun AppNav() {
         }
     }
 
-    // V6: selected = ic_nav_*_selected (light fill); unselected = ic_nav_*; tint white / #808080; no red indicator.
+    // Lanhu slices: selected = ic_nav_*_sle (gold fill); unselected = ic_nav_*_nor.
     val tabs = listOf(
-        Tab(Routes.HOME, R.string.nav_home, R.drawable.ic_nav_home, R.drawable.ic_nav_home_selected),
-        Tab(Routes.CHANNEL, R.string.nav_channel, R.drawable.ic_nav_channel, R.drawable.ic_nav_channel_selected),
-        Tab(Routes.SEARCH, R.string.nav_search, R.drawable.ic_nav_search, R.drawable.ic_nav_search_selected),
-        Tab(Routes.MY, R.string.nav_my, R.drawable.ic_nav_my, R.drawable.ic_nav_my_selected),
+        Tab(Routes.HOME, R.string.nav_home, R.drawable.ic_nav_home_nor, R.drawable.ic_nav_home_sle),
+        Tab(Routes.CHANNEL, R.string.nav_channel, R.drawable.ic_nav_channel_nor, R.drawable.ic_nav_channel_sle),
+        Tab(Routes.SEARCH, R.string.nav_search, R.drawable.ic_nav_search_nor, R.drawable.ic_nav_search_sle),
+        Tab(Routes.MY, R.string.nav_my, R.drawable.ic_nav_my_nor, R.drawable.ic_nav_my_sle),
     )
     val showBottomBar = currentRoute in tabs.map { it.route }
 
@@ -208,52 +214,67 @@ fun AppNav() {
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             if (showBottomBar) {
-                NavigationBar(
-                    modifier = Modifier.height(VideoPlayDimens.TabBarHeight.dp),
-                    containerColor = TabBarBg,
-                    contentColor = MutedText,
-                    tonalElevation = 0.dp,
+                // Keep the 66dp tab bar above the system navigation area. Without this,
+                // NavigationBar's own window inset eats most of the fixed height on
+                // 3-button navigation and the icons/labels get clipped.
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(TabBarBg)
+                        .navigationBarsPadding(),
                 ) {
-                    tabs.forEach { tab ->
-                        val selected = currentRoute == tab.route
-                        NavigationBarItem(
-                            selected = selected,
-                            onClick = {
-                                navController.navigate(tab.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
+                    NavigationBar(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 22.dp)
+                            .height(VideoPlayDimens.TabBarHeight.dp),
+                        containerColor = TabBarBg,
+                        contentColor = MutedText,
+                        tonalElevation = 0.dp,
+                        windowInsets = WindowInsets(0, 0, 0, 0),
+                    ) {
+                        tabs.forEach { tab ->
+                            val selected = currentRoute == tab.route
+                            NavigationBarItem(
+                                selected = selected,
+                                onClick = {
+                                    navController.navigate(tab.route) {
+                                        popUpTo(navController.graph.findStartDestination().id) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
                                     }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
-                            icon = {
-                                Icon(
-                                    painter = painterResource(
-                                        if (selected) tab.selectedIconRes else tab.iconRes,
-                                    ),
-                                    contentDescription = null,
-                                    tint = if (selected) BrandGold else MutedText,
-                                    modifier = Modifier.size(VideoPlayDimens.NavIconSize.dp),
-                                )
-                            },
-                            label = {
-                                Text(
-                                    text = stringResource(tab.labelRes),
-                                    color = if (selected) BrandGold else MutedText,
-                                    fontSize = 8.sp,
-                                    fontFamily = VideoPlayFontFamily,
-                                    maxLines = 1,
-                                )
-                            },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = BrandGold,
-                                selectedTextColor = BrandGold,
-                                unselectedIconColor = MutedText,
-                                unselectedTextColor = MutedText,
-                                indicatorColor = Color.Transparent,
-                            ),
-                        )
+                                },
+                                icon = {
+                                    Icon(
+                                        painter = painterResource(
+                                            if (selected) tab.selectedIconRes else tab.iconRes,
+                                        ),
+                                        contentDescription = null,
+                                        tint = Color.Unspecified,
+                                        modifier = Modifier.size(VideoPlayDimens.NavIconSize.dp),
+                                    )
+                                },
+                                label = {
+                                    Text(
+                                        text = stringResource(tab.labelRes),
+                                        color = if (selected) BrandGold else MutedText,
+                                        fontSize = 8.sp,
+                                        fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+                                        fontFamily = VideoPlayFontFamily,
+                                        maxLines = 1,
+                                    )
+                                },
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = BrandGold,
+                                    selectedTextColor = BrandGold,
+                                    unselectedIconColor = MutedText,
+                                    unselectedTextColor = MutedText,
+                                    indicatorColor = Color.Transparent,
+                                ),
+                            )
+                        }
                     }
                 }
             }

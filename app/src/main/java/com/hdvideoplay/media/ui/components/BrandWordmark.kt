@@ -2,7 +2,7 @@ package com.hdvideoplay.media.ui.components
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -65,7 +65,7 @@ fun BrandWordmark(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 10.dp),
+            .height(56.dp),
         contentAlignment = Alignment.Center,
     ) {
         BasicText(text = annotated)

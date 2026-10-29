@@ -1,3 +1,16 @@
 # Project exclude paths
-/.gradle/
-/build/
+.gradle/
+build/
+.kotlin/
+.idea/
+.vscode/
+captures/
+.cxx/
+.externalNativeBuild/
+
+# Local machine config (SDK path, per-machine)
+local.properties
+
+# IDE / build leftovers
+*.iml
+*.hprof

@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
@@ -306,6 +307,7 @@ private fun PortraitControls(
             Modifier
                 .fillMaxWidth()
                 .align(Alignment.TopCenter)
+                .statusBarsPadding()
                 .padding(horizontal = 2.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -384,6 +386,7 @@ private fun LandscapeControls(
             Modifier
                 .fillMaxWidth()
                 .align(Alignment.TopCenter)
+                .statusBarsPadding()
                 .padding(horizontal = 4.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -704,7 +707,7 @@ private fun LandscapeProgressBlock(
     }
 }
 
-/** Slim gold progress track (2dp) + white thumb. */
+/** Slim white progress track (2dp) + centered white thumb (稿 播放详情). */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun ThinSeekSlider(
@@ -723,11 +726,18 @@ private fun ThinSeekSlider(
             inactiveTrackColor = Color(0x55FFFFFF),
         ),
         thumb = {
+            // Match the track's 20dp slot so Material3 centers the thumb on the
+            // 2dp line; a 9dp slot is top-aligned and floats above the track.
             Box(
-                Modifier
-                    .size(9.dp)
-                    .background(Color.White, CircleShape),
-            )
+                modifier = Modifier.size(20.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    Modifier
+                        .size(9.dp)
+                        .background(Color.White, CircleShape),
+                )
+            }
         },
         track = { sliderState ->
             val range = sliderState.valueRange
@@ -744,7 +754,7 @@ private fun ThinSeekSlider(
                         .fillMaxWidth()
                         .height(2.dp)
                         .clip(RoundedCornerShape(1.dp))
-                        .background(Color(0x55FFFFFF))
+                        .background(Color(0x99FFFFFF))
                         .align(Alignment.Center),
                 )
                 Box(
@@ -752,7 +762,7 @@ private fun ThinSeekSlider(
                         .fillMaxWidth(frac)
                         .height(2.dp)
                         .clip(RoundedCornerShape(1.dp))
-                        .background(VideoPlayTokens.AccentGold)
+                        .background(Color.White)
                         .align(Alignment.CenterStart),
                 )
             }

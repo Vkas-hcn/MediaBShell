@@ -33,7 +33,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -57,12 +59,18 @@ import kotlin.text.CharCategory
 private val CapsuleShape = RoundedCornerShape(12.dp)
 private val MetaChipShape = RoundedCornerShape(12.dp)
 private val QualityBadgeShape = RoundedCornerShape(4.dp)
-private val UnselectedBg = VideoPlayTokens.ChipBg
-private val UnselectedFg = VideoPlayTokens.Muted
-/** Selected season/episode (and shared capsules): gold fill per 高靖 2026-10-28 / 稿07. */
-private val SelectedBg = VideoPlayTokens.AccentGold
-/** Dark text on AccentGold fill (matches Theme onPrimary). */
-private val SelectedFg = Color.Black
+private val UnselectedBg = Color(0xFF141824)
+private val UnselectedFg = Color(0xFFCBD5E1)
+private val UnselectedBorder = Color(0x1FFFFFFF)
+/** Selected Play Source capsule: gold gradient + gold outline + dot (稿 播放详情). */
+private val SelectedGradientStart = Color(0x33F59E0B)
+private val SelectedGradientEnd = Color(0x1AD97706)
+private val SelectedFg = Color(0xFFFCD34D)
+/** Solid gold fill for HD badge / selected episode chip. */
+private val SelectedSolidBg = VideoPlayTokens.AccentGold
+private val SelectedSolidFg = Color.Black
+private val SelectedBorder = Color(0xFFFFB800)
+private val SelectedDot = Color(0xFFFBBF24)
 private val DimFg = VideoPlayTokens.Muted
 
 /** UI model for Cast tab — stage detail API currently has no cast payload. */
@@ -381,8 +389,8 @@ private fun MetaInfoCapsule(
     text: String,
     emphasized: Boolean,
 ) {
-    val bg = if (emphasized) SelectedBg else UnselectedBg
-    val fg = if (emphasized) SelectedFg else UnselectedFg
+    val bg = if (emphasized) SelectedSolidBg else UnselectedBg
+    val fg = if (emphasized) SelectedSolidFg else UnselectedFg
     Text(
         text = text,
         color = fg,
@@ -678,10 +686,11 @@ fun PlaySourceRow(
             text = stringResource(R.string.play_source),
             color = Color.White,
             fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold,
+            lineHeight = 20.sp,
+            fontWeight = FontWeight.Medium,
             modifier = Modifier.padding(horizontal = 16.dp),
         )
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(12.dp))
         when (linesStatus) {
             LinesStatus.Checking -> {
                 Text(
@@ -704,7 +713,7 @@ fun PlaySourceRow(
                     modifier = Modifier
                         .horizontalScroll(rememberScrollState())
                         .padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp), // V8-4 chip gap
+                    horizontalArrangement = Arrangement.spacedBy(12.dp), // 稿: 12dp chip gap
                 ) {
                     lines.forEachIndexed { index, link ->
                         val selected = index == selectedLineIndex
@@ -725,15 +734,16 @@ fun PlaySourceRow(
                         text = stringResource(R.string.quality),
                         color = Color.White,
                         fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        lineHeight = 20.sp,
+                        fontWeight = FontWeight.Medium,
                         modifier = Modifier.padding(horizontal = 16.dp),
                     )
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(12.dp))
                     Row(
                         modifier = Modifier
                             .horizontalScroll(rememberScrollState())
                             .padding(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp), // V8-4 chip gap
+                        horizontalArrangement = Arrangement.spacedBy(12.dp), // 稿: 12dp chip gap
                     ) {
                         qualityLabels.forEachIndexed { index, label ->
                             SourceCapsule(
@@ -758,7 +768,11 @@ fun SourceCapsule(
     modifier: Modifier = Modifier,
     dimmed: Boolean = false,
 ) {
-    val bg = if (selected) SelectedBg else UnselectedBg
+    val bgBrush = if (selected) {
+        Brush.horizontalGradient(listOf(SelectedGradientStart, SelectedGradientEnd))
+    } else {
+        SolidColor(UnselectedBg)
+    }
     val fg = when {
         selected -> SelectedFg
         dimmed -> UnselectedFg.copy(alpha = 0.55f)
@@ -768,20 +782,27 @@ fun SourceCapsule(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .widthIn(max = 160.dp)
-            .heightIn(min = 28.dp)
-            .background(bg, CapsuleShape)
-            .then(
-                if (selected) Modifier
-                else Modifier.border(1.dp, VideoPlayTokens.ChipBorder, CapsuleShape),
-            )
+            .height(32.dp)
+            .clip(CapsuleShape)
+            .background(bgBrush)
+            .border(1.dp, if (selected) SelectedBorder else UnselectedBorder, CapsuleShape)
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .padding(horizontal = 12.dp),
     ) {
+        if (selected) {
+            Box(
+                Modifier
+                    .size(8.dp)
+                    .background(SelectedDot, CircleShape),
+            )
+            Spacer(Modifier.width(4.dp))
+        }
         Text(
             text = label,
             color = fg,
             fontSize = 12.sp,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            lineHeight = 16.sp,
+            fontWeight = FontWeight.Normal,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -813,7 +834,7 @@ fun SeasonEpisodePicker(
             modifier = Modifier
                 .horizontalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp), // V8-4 chip gap
+            horizontalArrangement = Arrangement.spacedBy(12.dp), // 稿: 12dp chip gap
         ) {
             seasons.forEachIndexed { index, season ->
                 SourceCapsule(
@@ -871,8 +892,8 @@ private fun EpisodeNumberChip(
     onClick: () -> Unit,
 ) {
     val shape = CircleShape
-    val bg = if (selected) SelectedBg else UnselectedBg
-    val fg = if (selected) SelectedFg else UnselectedFg
+    val bg = if (selected) SelectedSolidBg else UnselectedBg
+    val fg = if (selected) SelectedSolidFg else UnselectedFg
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
