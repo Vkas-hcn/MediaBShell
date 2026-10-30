@@ -56,6 +56,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -88,7 +89,6 @@ import com.hdvideoplay.media.data.dto.PlaySourceDto
 import com.hdvideoplay.media.util.CdnRequestHeaders
 import com.hdvideoplay.media.data.dto.SubtitleDto
 import com.hdvideoplay.media.ui.components.ErrorBox
-import com.hdvideoplay.media.ui.components.LoadingBox
 import com.hdvideoplay.media.ui.components.UiState
 import com.hdvideoplay.media.ui.theme.MediaTheme
 import java.util.concurrent.atomic.AtomicBoolean
@@ -232,7 +232,21 @@ class PlayerActivity : ComponentActivity() {
                         .background(Color.Black),
                 ) {
                     when (val s = state) {
-                        UiState.Loading -> LoadingBox(message = stringResource(R.string.loading_links))
+                        UiState.Loading -> PlayerLoadingShell(
+                            title = titleExtra.ifBlank {
+                                detailMeta?.detail?.details?.title
+                                    ?.takeIf { it.isNotBlank() }
+                                    ?: stringResource(R.string.player_title)
+                            },
+                            mediaId = currentMediaId,
+                            detailMeta = detailMeta,
+                            detailMetaLoading = detailMetaLoading,
+                            currentEpisode = currentEpisode,
+                            onBack = { attemptReturnAdThenFinish() },
+                            onSelectSeason = viewModel::selectSeason,
+                            onSwitchEpisode = viewModel::switchEpisode,
+                            onOpenRecommend = openRecommend,
+                        )
                         is UiState.Error -> {
                             // §7: empty_links / no url → stay in Player (NO auto finish);
                             // player-area ErrorBox + WatchMeta below when meta available.
@@ -363,6 +377,112 @@ class PlayerActivity : ComponentActivity() {
     }
 }
 
+
+/**
+ * Immediate player shell while links/meta load. This replaces the old
+ * full-screen LoadingBox: video area and meta skeleton are visible at once,
+ * with no page-sized spinner.
+ */
+@Composable
+private fun PlayerLoadingShell(
+    title: String,
+    mediaId: Int,
+    detailMeta: PlayerDetailMeta?,
+    detailMetaLoading: Boolean,
+    currentEpisode: Int,
+    onBack: () -> Unit,
+    onSelectSeason: (Int) -> Unit,
+    onSwitchEpisode: (Int) -> Unit,
+    onOpenRecommend: (MediaItemDto) -> Unit,
+) {
+    val landscape =
+        LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val containerH = rememberPortraitVideoHeight()
+    val meta = detailMeta?.detail
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(if (landscape) Color.Black else VideoPlayTokens.PageBg),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(
+                    if (landscape) Modifier.weight(1f)
+                    else Modifier.height(containerH),
+                )
+                .background(Color.Black),
+        ) {
+            Box(
+                modifier = if (landscape) {
+                    Modifier.fillMaxSize()
+                } else {
+                    Modifier
+                        .align(Alignment.Center)
+                        .fillMaxWidth()
+                        .aspectRatio(16f / 9f)
+                },
+            ) {
+                // Video-surface skeleton, not a full-page loading indicator.
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(Color(0xFF0B0E14)),
+                )
+                Box(
+                    Modifier
+                        .align(Alignment.Center)
+                        .fillMaxWidth(0.24f)
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF141824)),
+                )
+            }
+            Text(
+                text = "\u2190",
+                color = Color.White,
+                fontSize = 28.sp,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .statusBarsPadding()
+                    .clickable(onClick = onBack)
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            )
+        }
+
+        if (!landscape) {
+            val scroll = rememberScrollState()
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(scroll)
+                    .background(VideoPlayTokens.PageBg)
+                    .padding(bottom = 24.dp),
+            ) {
+                WatchMetaSection(
+                    details = meta?.details,
+                    titleFallback = title,
+                    currentLineLabel = null,
+                    lines = emptyList(),
+                    selectedLineIndex = 0,
+                    linesStatus = LinesStatus.Checking,
+                    seasons = meta?.seasons.orEmpty(),
+                    selectedSeasonIndex = detailMeta?.selectedSeasonIndex ?: 0,
+                    selectedEpisode = currentEpisode,
+                    recommends = meta?.recommends.orEmpty(),
+                    onSelectLine = {},
+                    onSelectSeason = onSelectSeason,
+                    onSelectEpisode = { _, ep, _ -> onSwitchEpisode(ep) },
+                    onOpenRecommend = onOpenRecommend,
+                    fallbackMediaId = mediaId,
+                    loading = detailMetaLoading,
+                )
+            }
+        }
+    }
+}
 
 /**
  * §7 no-source shell: 16:9 player area shows ErrorBox ("暂无可用线路" + retry);
