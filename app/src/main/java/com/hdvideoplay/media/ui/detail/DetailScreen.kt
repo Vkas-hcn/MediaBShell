@@ -136,6 +136,8 @@ private fun DetailContent(
     val isMovie = model?.isMovie ?: true
     val lines = model?.lines.orEmpty()
     val selectedLineIndex = model?.selectedLineIndex ?: 0
+    val selectedLinePlayable =
+        model?.lineProbeOk?.getOrNull(selectedLineIndex) == true
     val linesStatus = model?.linesStatus ?: LinesStatus.Checking
     val seasons = model?.seasons.orEmpty()
     val recommends = model?.detail?.recommends.orEmpty()
@@ -158,10 +160,18 @@ private fun DetailContent(
         onPlay(mediaId, ep, title, fullscreen, lineIndex)
     }
 
-    // Play-auto: when EXTRA_AUTO_PLAY, jump to Player as soon as lines Ready — no red-button wait.
-    LaunchedEffect(autoPlay, loading, linesStatus, selectedLineIndex, mediaId) {
+    // Play-auto: wait for the full probe, then start the first verified line.
+    LaunchedEffect(
+        autoPlay,
+        loading,
+        linesStatus,
+        selectedLineIndex,
+        selectedLinePlayable,
+        mediaId,
+    ) {
         if (loading || !autoPlay || autoPlayFired || mediaId <= 0) return@LaunchedEffect
         if (linesStatus != LinesStatus.Ready || lines.isEmpty()) return@LaunchedEffect
+        if (!selectedLinePlayable) return@LaunchedEffect
         autoPlayFired = true
         playEpisode(playEpisodeNumber, fullscreen = false, lineIndex = selectedLineIndex)
     }

@@ -28,7 +28,26 @@ import okhttp3.Request
 object PlaySourceProbe {
 
     private const val TAG = "PlaySourceProbe"
-    private const val MAX_CONCURRENCY = 3
+    private const val MAX_CONCURRENCY = 8
+
+    /** Per-line probe result. [sourceFlags] aligns with the original source list. */
+    data class ProbedLink(
+        val link: OutsideLinkDto,
+        val sourceFlags: List<Boolean>,
+    ) {
+        val isValid: Boolean get() = sourceFlags.any { it }
+
+        /** Valid sources first; original order is preserved inside both groups. */
+        fun orderedLink(): OutsideLinkDto {
+            val valid = link.list.filterIndexed { index, _ ->
+                sourceFlags.getOrElse(index) { false }
+            }
+            val invalid = link.list.filterIndexed { index, _ ->
+                !sourceFlags.getOrElse(index) { false }
+            }
+            return link.copy(list = valid + invalid)
+        }
+    }
 
     /** Status codes that mean the CDN accepted the probe. */
     fun isAvailableStatus(code: Int): Boolean = code == 200 || code == 206
@@ -54,6 +73,27 @@ object PlaySourceProbe {
                 }
             }.awaitAll()
         }
+    }
+
+    /**
+     * Probe every line/source concurrently, then expose results for ordering.
+     * HEAD is attempted first per source; the existing Range/GET fallback remains
+     * for CDNs that reject HEAD. Headers are applied per source by [probe].
+     */
+    suspend fun probeLinks(links: List<OutsideLinkDto>): List<ProbedLink> {
+        val flags = markAvailability(links)
+        return links.mapIndexed { index, link ->
+            ProbedLink(
+                link = link,
+                sourceFlags = flags.getOrElse(index) { List(link.list.size) { false } },
+            )
+        }
+    }
+
+    /** Stable partition: playable lines first, unplayable lines after. */
+    fun validFirst(probed: List<ProbedLink>): List<ProbedLink> {
+        val (valid, invalid) = probed.partition { it.isValid }
+        return valid + invalid
     }
 
     /**

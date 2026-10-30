@@ -10,6 +10,7 @@ import com.hdvideoplay.media.data.dto.DetailResponseDto
 import com.hdvideoplay.media.data.dto.OutsideLinkDto
 import com.hdvideoplay.media.data.dto.PlayReportBody
 import com.hdvideoplay.media.data.dto.PlaySourceDto
+import com.hdvideoplay.media.data.probe.PlaySourceProbe
 import com.hdvideoplay.media.data.repo.MediaRepository
 import com.hdvideoplay.media.ui.components.UiState
 import com.hdvideoplay.media.util.asIntOrNull
@@ -134,38 +135,31 @@ class PlayerViewModel(
                 _linksState.value = UiState.Error("empty_links")
                 return@launch
             }
-            // Soft prefer HLS inside each line (still keep all sources for failover).
-            val preferred = raw.map { link ->
-                val sorted = link.list.sortedBy { src ->
-                    val u = src.url.lowercase()
-                    when {
-                        ".m3u8" in u -> 0
-                        ".mpd" in u -> 1
-                        else -> 2
-                    }
-                }
-                link.copy(list = sorted)
+
+            // Probe every line/source concurrently before publishing playback.
+            // The player shell shows its skeleton while this runs.
+            val probed = try {
+                PlaySourceProbe.probeLinks(raw)
+            } catch (ce: kotlinx.coroutines.CancellationException) {
+                throw ce
+            } catch (_: Throwable) {
+                raw.map { PlaySourceProbe.ProbedLink(it, List(it.list.size) { false }) }
             }
-            // Soft prefer lines that have HLS/DASH before pure progressive CDN mp4.
-            val ordered = preferred.sortedBy { link ->
-                val u = link.list.firstOrNull()?.url?.lowercase().orEmpty()
-                when {
-                    ".m3u8" in u -> 0
-                    ".mpd" in u -> 1
-                    else -> 2
-                }
+            val orderedProbed = PlaySourceProbe.validFirst(probed)
+            val firstValid = orderedProbed.indexOfFirst { it.isValid }
+            if (firstValid < 0) {
+                _linksState.value = UiState.Error("no_alive_links")
+                return@launch
             }
-            // Direct play: no filterAvailable / no_alive_links gate.
-            // Explicit Detail lineIndex is against API (raw) order; map into soft-preferred
-            // [ordered] by URL set — not firstUrl, because in-line HLS sort moves first().
-            val line = if (initialLineIndex in raw.indices && initialLineIndex != 0) {
-                val targetUrls = raw[initialLineIndex].list.map { it.url }.toSet()
-                ordered.indexOfFirst { link ->
-                    link.list.any { it.url in targetUrls }
-                }.let { if (it >= 0) it else 0 }
+
+            val ordered = orderedProbed.map { it.orderedLink() }
+            // Detail passes its post-probe line index; direct content opens at 0.
+            // Keep an explicit valid selection, otherwise fall back to first verified.
+            val requested = initialLineIndex.takeIf { it in orderedProbed.indices }
+            val line = if (requested != null && orderedProbed[requested].isValid) {
+                requested
             } else {
-                // Default: start on first soft-preferred (usually HLS) line.
-                0
+                firstValid
             }
             _linksState.value = UiState.Success(
                 PlayerReady(

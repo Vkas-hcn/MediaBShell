@@ -12,6 +12,7 @@ import com.hdvideoplay.media.data.dto.MediaItemDto
 import com.hdvideoplay.media.data.dto.PagedResultsDto
 import com.hdvideoplay.media.data.dto.StreamEntryDto
 import com.hdvideoplay.media.data.dto.StreamingPlatformDto
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
@@ -23,8 +24,19 @@ class MediaRepository(
     private val api: MediaApi = NetworkModule.api,
     private val json: Json = NetworkModule.json,
 ) {
-    suspend fun homeData(language: String = "en"): Result<List<HomeModuleDto>> =
+    /**
+     * Home data must survive a network failure so the Home screen (and the
+     * recall popup's offline fallback path) can render instead of crashing.
+     * The API call is evaluated before decodeList()'s try block, so catch it
+     * here as well.
+     */
+    suspend fun homeData(language: String = "en"): Result<List<HomeModuleDto>> = try {
         decodeList(api.homeData(language))
+    } catch (cancel: CancellationException) {
+        throw cancel
+    } catch (t: Throwable) {
+        Result.failure(t)
+    }
 
     suspend fun homeStreamData(): Result<List<StreamEntryDto>> =
         decodeList(api.homeStreamData())

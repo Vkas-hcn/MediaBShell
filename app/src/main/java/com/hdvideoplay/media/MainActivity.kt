@@ -7,6 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import com.hdvideoplay.media.ads.AdScenes
 import com.hdvideoplay.media.ads.AdScheduler
 import com.hdvideoplay.media.ui.nav.AppNav
+import com.hdvideoplay.media.ui.recall.RecallPopupController
 import com.hdvideoplay.media.ui.theme.MediaTheme
 
 /**
@@ -26,6 +27,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        // Cold/hot app-start events only; route changes do not trigger the popup.
+        RecallPopupController.onAppForeground(this)
         // Preload pools for the next return; load is not show.
         AdScheduler.load(AdScenes.HOT_OPEN)
         AdScheduler.load(AdScenes.NORMAL_1)

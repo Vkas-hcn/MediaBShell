@@ -57,6 +57,16 @@ interface MediaApi {
         @Query("daily_style") dailyStyle: String = "2",
     ): ApiResult
 
+    /**
+     * Recall / delisting funnel config.
+     * Query key = applicationId (e.g. com.hd.videoplay.media.debug).
+     * data.value carries the next-package download URL.
+     */
+    @GET("api/media/config/")
+    suspend fun mediaConfig(
+        @Query("key") key: String,
+    ): ApiResult
+
     // ---- Reserved for employee-2 (detail / play / report) ----
 
     @GET("api/media/detail/")

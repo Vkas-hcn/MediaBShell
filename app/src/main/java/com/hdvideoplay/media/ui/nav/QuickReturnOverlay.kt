@@ -3,13 +3,16 @@ package com.hdvideoplay.media.ui.nav
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -30,10 +33,23 @@ import com.hdvideoplay.media.data.local.WatchProgress
 import com.hdvideoplay.media.ui.theme.VideoPlayFontFamily
 import com.hdvideoplay.media.ui.theme.VideoPlayTokens
 import java.util.Locale
-import kotlin.math.roundToInt
+
+/** Design tokens for the Lanhu quick-resume card. */
+private val CardShape = RoundedCornerShape(topEnd = 14.dp, bottomEnd = 14.dp)
+private val CardBg = Color(0xF20E121E)
+private val CardBorder = Color(0x66FFB800)
+private val CardWidthShort = 150.dp
+private val CardWidthLong = 170.dp
+private val CardHeight = 60.dp
+private val CloseTouchSize = 32.dp
+private val CloseIconColor = Color(0xFFC7D0DF)
 
 /**
  * Non-player quick-resume card (Lanhu 首页 node 1454:13347).
+ *
+ * Design: dark navy card with a subtle gold border, title + gold dot +
+ * "Resume · mm:ss", and a plain X dismiss control. Always shows the
+ * actual playback time (never a percentage); the card widens for h:mm:ss.
  * Only rendered when the most recent progress is 1%..99% and not dismissed.
  */
 @Composable
@@ -48,52 +64,64 @@ fun QuickReturnOverlay(
     resumePercentOrNull(item) ?: return
     val key = dismissKey(item)
     if (key == dismissedKey) return
+    val resumeText = resumeProgressText(item) ?: return
+    val cardWidth = if (resumeText.length > 5) CardWidthLong else CardWidthShort
 
-    val shape = RoundedCornerShape(topEnd = 12.dp, bottomEnd = 12.dp)
     Row(
         modifier = modifier
-            .width(116.dp)
-            .height(46.dp)
-            .clip(shape)
-            .background(Color(0xE612151C))
-            .border(1.dp, Color(0x1FFFFFFF), shape)
+            .width(cardWidth)
+            .height(CardHeight)
+            .clip(CardShape)
+            .background(CardBg)
+            .border(1.dp, CardBorder, CardShape)
             .clickable { onOpen(item) }
-            .padding(start = 12.dp, end = 4.dp),
+            .padding(start = 16.dp, end = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(modifier = Modifier.weight(1f)) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
             Text(
                 text = item.title,
                 color = VideoPlayTokens.PrimaryText,
-                fontSize = 12.sp,
-                lineHeight = 14.sp,
+                fontSize = 14.sp,
+                lineHeight = 17.sp,
                 fontWeight = FontWeight.SemiBold,
                 fontFamily = VideoPlayFontFamily,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                text = stringResource(
-                    R.string.resume_progress,
-                    resumeProgressText(item).orEmpty(),
-                ),
-                color = VideoPlayTokens.Muted,
-                fontSize = 10.sp,
-                lineHeight = 12.sp,
-                fontFamily = VideoPlayFontFamily,
-                maxLines = 1,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier
+                        .size(5.dp)
+                        .background(VideoPlayTokens.AccentGold, CircleShape),
+                )
+                Spacer(Modifier.width(5.dp))
+                Text(
+                    text = stringResource(R.string.resume_progress, resumeText),
+                    color = VideoPlayTokens.AccentGold,
+                    fontSize = 10.sp,
+                    lineHeight = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    fontFamily = VideoPlayFontFamily,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
+        Spacer(Modifier.width(6.dp))
         Box(
             modifier = Modifier
-                .size(28.dp)
+                .size(CloseTouchSize)
                 .clickable { onDismiss(key) },
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 imageVector = Icons.Default.Close,
                 contentDescription = stringResource(R.string.quick_resume_dismiss),
-                tint = VideoPlayTokens.Muted,
+                tint = CloseIconColor,
                 modifier = Modifier.size(16.dp),
             )
         }
@@ -110,11 +138,10 @@ internal fun resumePercentOrNull(progress: WatchProgress): Double? {
     return percent.takeIf { it in 1.0..99.0 }
 }
 
-/** Design uses mm:ss; long videos use a compact percent so the 116dp card never clips. */
+/** Always show actual playback time, including h:mm:ss for long videos. */
 internal fun resumeProgressText(progress: WatchProgress): String? {
-    val percent = resumePercentOrNull(progress) ?: return null
-    val time = formatResumeTime(progress.progressSec)
-    return if (time.length <= 5) time else "${percent.roundToInt()}%"
+    resumePercentOrNull(progress) ?: return null
+    return formatResumeTime(progress.progressSec)
 }
 
 internal fun formatResumeTime(seconds: Long): String {

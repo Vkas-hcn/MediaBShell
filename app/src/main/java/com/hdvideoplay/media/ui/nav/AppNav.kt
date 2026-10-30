@@ -64,6 +64,9 @@ import com.hdvideoplay.media.ui.my.HistoryScreen
 import com.hdvideoplay.media.ui.my.MyScreen
 import com.hdvideoplay.media.ui.my.SettingsScreen
 import com.hdvideoplay.media.ui.player.PlayerActivity
+import com.hdvideoplay.media.ui.recall.RecallPopup
+import com.hdvideoplay.media.ui.recall.RecallPopupController
+import com.hdvideoplay.media.ui.recall.RecallPopupUiState
 import com.hdvideoplay.media.ui.search.SearchScreen
 import com.hdvideoplay.media.ui.theme.BrandGold
 import com.hdvideoplay.media.ui.theme.MutedText
@@ -126,6 +129,7 @@ fun AppNav() {
     val historyRepository = remember(context) { WatchHistoryRepository.get(context) }
     val continueWatching by historyRepository.observeContinueWatching(1)
         .collectAsStateWithLifecycle(initialValue = emptyList())
+    val recallState by RecallPopupController.state.collectAsStateWithLifecycle()
     var dismissedResumeKey by rememberSaveable { mutableStateOf<String?>(null) }
 
     // V2C: Home/Channel/Search/History/Module enter dwell (+ Detail/Player Activities).
@@ -372,6 +376,21 @@ fun AppNav() {
                     .align(Alignment.BottomStart)
                     .padding(bottom = 12.dp),
             )
+
+            // App-start modal. The trigger lives in MainActivity.onResume and
+            // only fires for cold/hot starts, never for tab or route changes.
+            // It is a Dialog window so the scrim covers the system bars.
+            when (val recall = recallState) {
+                is RecallPopupUiState.Visible -> RecallPopup(
+                    downloadUrl = recall.downloadUrl,
+                    onDismiss = RecallPopupController::dismiss,
+                    onUpgrade = { url ->
+                        RecallPopupController.dismiss()
+                        RecallPopupController.openDownload(context, url)
+                    },
+                )
+                RecallPopupUiState.Hidden -> Unit
+            }
         }
     }
 }

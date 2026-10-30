@@ -33,7 +33,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -268,19 +270,20 @@ private fun FilterChipRow(
         Text(
             text = label,
             color = MutedText,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Medium,
+            fontSize = 14.sp,
+            lineHeight = 16.sp,
+            fontWeight = FontWeight.Normal,
             fontFamily = VideoPlayFontFamily,
             maxLines = 1,
             modifier = Modifier
-                .padding(end = 8.dp)
-                .widthIn(min = 52.dp, max = 72.dp),
+                .padding(end = 12.dp)
+                .widthIn(min = 40.dp, max = 72.dp),
         )
         Row(
             modifier = Modifier
                 .weight(1f)
                 .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             options.forEach { opt ->
@@ -296,32 +299,45 @@ private fun FilterChipRow(
     }
 }
 
-/** Selected = gold outline; unselected = dark chip. */
+/**
+ * Lanhu search filter chip.
+ * Selected: #FCD34D text, #FFB800 border, gold gradient fill.
+ * Unselected: #CBD5E1 text, white 12% border, #141824 fill.
+ */
 @Composable
 private fun FilterChip(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    val shape = RoundedCornerShape(14.dp)
-    val bg = ChipBg
-    val fg = if (selected) PrimaryText else MutedText
-    val border = if (selected) BrandGold else ChipBorder
+    val shape = RoundedCornerShape(13.dp)
+    val bg: Brush = if (selected) {
+        Brush.horizontalGradient(
+            listOf(
+                Color(0x33F59E0B), // rgba(245,158,11,0.20)
+                Color(0x1AD97706), // rgba(217,119,6,0.10)
+            ),
+        )
+    } else {
+        SolidColor(Color(0xFF141824))
+    }
+    val fg = if (selected) Color(0xFFFCD34D) else Color(0xFFCBD5E1)
+    val border = if (selected) BrandGold else Color(0x1FFFFFFF)
     Box(
         modifier = Modifier
-            .height(28.dp)
+            .height(26.dp)
             .widthIn(max = 140.dp)
             .background(bg, shape)
             .border(1.dp, border, shape)
             .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 6.dp),
+            .padding(horizontal = 12.dp, vertical = 5.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = label,
             color = fg,
             fontSize = 12.sp,
-            lineHeight = 14.sp,
+            lineHeight = 16.sp,
             fontFamily = VideoPlayFontFamily,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,

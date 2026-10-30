@@ -19,7 +19,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
- * Line UI status. HaloDrift: show API lines immediately — never gate on probe.
+ * Line UI status. The detail page holds this at [Checking] until every line has
+ * been probed, so the Play Source row shows skeletons until the check completes.
  * [None] only when outside/links returns no usable URLs.
  */
 enum class LinesStatus {
@@ -32,14 +33,11 @@ enum class LinesStatus {
 data class DetailUiModel(
     val detail: DetailResponseDto,
     val selectedSeasonIndex: Int = 0,
-    /** All API lines with non-blank URLs — never probe-filtered. */
+    /** All API lines with non-blank URLs, ordered valid-first after probe. */
     val lines: List<OutsideLinkDto> = emptyList(),
     val selectedLineIndex: Int = 0,
     val linesStatus: LinesStatus = LinesStatus.Checking,
-    /**
-     * Optional weak probe marks per line (true if any source got 200/206).
-     * Null entry / missing = unknown. Marks must not hide chips or block play.
-     */
+    /** Probe marks aligned with [lines]; true if any source got 200/206. */
     val lineProbeOk: List<Boolean?> = emptyList(),
 ) {
     val seasons: List<SeasonDto> get() = detail.seasons
@@ -59,8 +57,6 @@ class DetailViewModel(
     private val mediaId: Int,
     private val initialEpisode: Int = 0,
     private val repo: MediaRepository = MediaRepository(),
-    /** When true, run optional background weak probe for chip marks only. */
-    private val enableWeakProbeMarks: Boolean = true,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<UiState<DetailUiModel>>(UiState.Loading)
@@ -118,7 +114,7 @@ class DetailViewModel(
         }
     }
 
-    /** Lines load after detail success; their failure must not hide the detail mask. */
+    /** Load, probe all lines concurrently, then publish valid-first ordering. */
     private suspend fun loadLinks() {
         val linksResult = try {
             repo.outsideLinks(mediaId, initialEpisode)
@@ -135,51 +131,46 @@ class DetailViewModel(
                 if (sources.isEmpty()) null else link.copy(list = sources)
             }
             .orEmpty()
-        // HaloDrift: show all API lines immediately — do NOT filterAvailable.
-        val status = if (raw.isNotEmpty()) LinesStatus.Ready else LinesStatus.None
+
+        if (raw.isEmpty()) {
+            publishLines(emptyList(), emptyList(), LinesStatus.None)
+            return
+        }
+
+        // Keep LinesStatus.Checking while this runs; PlaySourceRow stays skeleton.
+        val probed = try {
+            PlaySourceProbe.probeLinks(raw)
+        } catch (ce: CancellationException) {
+            throw ce
+        } catch (_: Throwable) {
+            // Probe infrastructure failed: keep API lines but mark them unknown.
+            raw.map { PlaySourceProbe.ProbedLink(it, List(it.list.size) { false }) }
+        }
+        val ordered = PlaySourceProbe.validFirst(probed)
+        val flags = ordered.map { it.isValid }
+        val lines = ordered.map { it.orderedLink() }
+        val selected = flags.indexOfFirst { it }.takeIf { it >= 0 } ?: 0
+        publishLines(lines, flags, LinesStatus.Ready, selected)
+    }
+
+    private fun publishLines(
+        lines: List<OutsideLinkDto>,
+        flags: List<Boolean>,
+        status: LinesStatus,
+        selected: Int = 0,
+    ) {
         _state.update { current ->
             if (current is UiState.Success) {
                 current.copy(
                     data = current.data.copy(
-                        lines = raw,
-                        selectedLineIndex = 0,
+                        lines = lines,
+                        selectedLineIndex = selected,
                         linesStatus = status,
-                        lineProbeOk = List(raw.size) { null },
+                        lineProbeOk = flags,
                     ),
                 )
             } else {
                 current
-            }
-        }
-
-        if (enableWeakProbeMarks && raw.isNotEmpty()) {
-            launchWeakMarks(raw)
-        }
-    }
-
-    /** Background marks only — never flips Ready→None or drops lines. */
-    private fun launchWeakMarks(raw: List<OutsideLinkDto>) {
-        viewModelScope.launch {
-            val marks = runCatching { PlaySourceProbe.markAvailability(raw) }.getOrNull()
-                ?: return@launch
-            val lineOk = marks.map { srcFlags ->
-                if (srcFlags.isEmpty()) false else srcFlags.any { it }
-            }
-            _state.update { current ->
-                if (current !is UiState.Success) return@update current
-                // Only annotate if still showing the same line count.
-                if (current.data.lines.size != lineOk.size) return@update current
-                val cur = current.data.selectedLineIndex
-                val curOk = lineOk.getOrNull(cur) == true
-                val firstProbeOk = lineOk.indexOfFirst { it == true }
-                val nextSelected =
-                    if (!curOk && firstProbeOk >= 0) firstProbeOk else cur
-                current.copy(
-                    data = current.data.copy(
-                        lineProbeOk = lineOk,
-                        selectedLineIndex = nextSelected,
-                    ),
-                )
             }
         }
     }

@@ -79,4 +79,8 @@
     <string name="more_chevron">More</string>
     <string name="resume_progress">Resume · %1$s</string>
     <string name="quick_resume_dismiss">Dismiss quick resume</string>
+
+    <string name="recall_upgrade_now">Upgrade Now</string>
+    <string name="recall_close">Close</string>
+    <string name="recall_message">Upgrade your watching experience. Faster launches, smoother playback, a bigger library — the new version is ready. Keep watching now.</string>
 </resources>
