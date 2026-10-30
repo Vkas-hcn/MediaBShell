@@ -19,6 +19,9 @@ object VideoPlayTokens {
     val ChipBorder: Color get() = com.hdvideoplay.media.ui.theme.ChipBorder
     val ProgressTrack = Color(0x66FFFFFF)
     val SectionCard = Color(0xFF0E1219)
+    /** Skeleton placeholder base / highlight. */
+    val SkeletonBase = Color(0xFF141824)
+    val SkeletonHighlight = Color(0xFF202838)
     /** Progress track on splash: #7C8CAE @ 32% */
     val SplashTrack: Color get() = SplashProgressTrack
 }

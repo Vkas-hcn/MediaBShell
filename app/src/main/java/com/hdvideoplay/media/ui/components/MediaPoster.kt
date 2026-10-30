@@ -9,7 +9,9 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -20,15 +22,20 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.hdvideoplay.media.R
 import com.hdvideoplay.media.data.dto.MediaItemDto
+import com.hdvideoplay.media.ui.theme.ChipBg
 import com.hdvideoplay.media.ui.theme.MutedText
 import com.hdvideoplay.media.ui.theme.PosterTitle
 import com.hdvideoplay.media.ui.theme.PrimaryText
@@ -123,6 +130,7 @@ fun MediaPosterCard(
                     lineHeight = 16.sp,
                     fontFamily = VideoPlayFontFamily,
                     maxLines = titleLines,
+                    minLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -153,25 +161,73 @@ fun PosterImage(
     posterPath: String?,
     contentDescription: String?,
     modifier: Modifier = Modifier,
+    placeholderRes: Int = R.drawable.ic_poster_placeholder,
 ) {
     val url = PosterUtils.resolvePosterUrl(posterPath)
+    val context = LocalContext.current
     Box(
         modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center,
     ) {
         if (url != null) {
             AsyncImage(
-                model = url,
+                model = ImageRequest.Builder(context)
+                    .data(url)
+                    .crossfade(SkeletonMotion.ImageFadeMs)
+                    .build(),
                 contentDescription = contentDescription,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
-                error = painterResource(R.drawable.ic_poster_placeholder),
-                placeholder = painterResource(R.drawable.ic_poster_placeholder),
+                error = painterResource(placeholderRes),
+                placeholder = painterResource(placeholderRes),
             )
         } else {
             Image(
-                painter = painterResource(R.drawable.ic_poster_placeholder),
+                painter = painterResource(placeholderRes),
                 contentDescription = contentDescription,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+    }
+}
+
+/**
+ * Circular avatar with a stable letter placeholder underneath the image.
+ * The image fades in over the letter, so a slow/failed load never flashes or
+ * changes the avatar's measured size.
+ */
+@Composable
+fun AvatarImage(
+    url: String?,
+    name: String,
+    size: Dp,
+    modifier: Modifier = Modifier,
+    initialFontSize: TextUnit = if (size >= 48.dp) 18.sp else 14.sp,
+) {
+    val context = LocalContext.current
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(ChipBg),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = name.trim().take(1).uppercase(),
+            color = Color.White,
+            fontSize = initialFontSize,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+        )
+        val resolved = url?.takeIf { it.isNotBlank() }
+        if (resolved != null) {
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(resolved)
+                    .crossfade(SkeletonMotion.ImageFadeMs)
+                    .build(),
+                contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )

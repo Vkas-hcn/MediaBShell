@@ -62,9 +62,9 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.hdvideoplay.media.ui.detail.LinesStatus
-import com.hdvideoplay.media.ui.detail.PlaySourceRow
 import com.hdvideoplay.media.ui.detail.SourceCapsule
 import com.hdvideoplay.media.ui.detail.WatchMetaSection
+import com.hdvideoplay.media.ui.detail.rememberPortraitVideoHeight
 import com.hdvideoplay.media.ui.theme.VideoPlayTokens
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -210,6 +210,7 @@ class PlayerActivity : ComponentActivity() {
 
                 // detailMeta independent of links — empty_links still shows WatchMeta (§7).
                 val detailMeta by viewModel.detailMeta.collectAsStateWithLifecycle()
+                val detailMetaLoading by viewModel.detailMetaLoading.collectAsStateWithLifecycle()
                 val currentEpisode by viewModel.currentEpisode.collectAsStateWithLifecycle()
                 val openRecommend: (MediaItemDto) -> Unit = { item ->
                     val id = item.localId()
@@ -261,6 +262,7 @@ class PlayerActivity : ComponentActivity() {
                                     },
                                     mediaId = currentMediaId,
                                     detailMeta = detailMeta,
+                                    detailMetaLoading = detailMetaLoading,
                                     currentEpisode = currentEpisode,
                                     onBack = { attemptReturnAdThenFinish() },
                                     onRetry = { if (currentMediaId > 0) viewModel.loadLinks() },
@@ -280,6 +282,7 @@ class PlayerActivity : ComponentActivity() {
                                 },
                                 mediaId = currentMediaId,
                                 detailMeta = detailMeta,
+                                detailMetaLoading = detailMetaLoading,
                                 currentEpisode = currentEpisode,
                                 startPositionMs = initialStartPositionMs,
                                 onBack = { attemptReturnAdThenFinish() },
@@ -371,6 +374,7 @@ private fun NoSourcePlayerShell(
     title: String,
     mediaId: Int,
     detailMeta: PlayerDetailMeta?,
+    detailMetaLoading: Boolean,
     currentEpisode: Int,
     onBack: () -> Unit,
     onRetry: () -> Unit,
@@ -389,9 +393,7 @@ private fun NoSourcePlayerShell(
             .fillMaxSize()
             .background(if (landscape) Color.Black else VideoPlayTokens.PageBg),
     ) {
-        val minH = LocalConfiguration.current.screenHeightDp.dp / 3
-        val videoH = LocalConfiguration.current.screenWidthDp.dp * 9f / 16f
-        val containerH = maxOf(minH, videoH)
+        val containerH = rememberPortraitVideoHeight()
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -440,31 +442,25 @@ private fun NoSourcePlayerShell(
                     .background(VideoPlayTokens.PageBg)
                     .padding(bottom = 24.dp),
             ) {
-                if (detailMeta != null) {
-                    WatchMetaSection(
-                        details = detailMeta.detail.details,
-                        titleFallback = displayTitle,
-                        currentLineLabel = null,
-                        lines = emptyList(),
-                        selectedLineIndex = 0,
-                        linesStatus = LinesStatus.None,
-                        seasons = detailMeta.detail.seasons,
-                        selectedSeasonIndex = detailMeta.selectedSeasonIndex,
-                        selectedEpisode = currentEpisode,
-                        recommends = detailMeta.detail.recommends,
-                        onSelectLine = {},
-                        onSelectSeason = onSelectSeason,
-                        onSelectEpisode = { _, ep, _ -> onSwitchEpisode(ep) },
-                        onOpenRecommend = onOpenRecommend,
-                        fallbackMediaId = mediaId,
-                    )
-                } else {
-                    Text(
-                        text = displayTitle,
-                        color = Color.White,
-                        modifier = Modifier.padding(16.dp),
-                    )
-                }
+                val meta = detailMeta?.detail
+                WatchMetaSection(
+                    details = meta?.details,
+                    titleFallback = displayTitle,
+                    currentLineLabel = null,
+                    lines = emptyList(),
+                    selectedLineIndex = 0,
+                    linesStatus = LinesStatus.None,
+                    seasons = meta?.seasons.orEmpty(),
+                    selectedSeasonIndex = detailMeta?.selectedSeasonIndex ?: 0,
+                    selectedEpisode = currentEpisode,
+                    recommends = meta?.recommends.orEmpty(),
+                    onSelectLine = {},
+                    onSelectSeason = onSelectSeason,
+                    onSelectEpisode = { _, ep, _ -> onSwitchEpisode(ep) },
+                    onOpenRecommend = onOpenRecommend,
+                    fallbackMediaId = mediaId,
+                    loading = detailMetaLoading,
+                )
             }
         }
     }
@@ -477,6 +473,7 @@ private fun PlayerContent(
     title: String,
     mediaId: Int,
     detailMeta: PlayerDetailMeta?,
+    detailMetaLoading: Boolean,
     currentEpisode: Int,
     startPositionMs: Long = 0L,
     onBack: () -> Unit,
@@ -740,9 +737,7 @@ private fun PlayerContent(
             .fillMaxSize()
             .background(if (landscape) Color.Black else VideoPlayTokens.PageBg),
     ) {
-        val minH = LocalConfiguration.current.screenHeightDp.dp / 3
-        val videoH = LocalConfiguration.current.screenWidthDp.dp * 9f / 16f
-        val containerH = maxOf(minH, videoH)
+        val containerH = rememberPortraitVideoHeight()
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -881,40 +876,33 @@ private fun PlayerContent(
                     .background(VideoPlayTokens.PageBg)
                     .padding(bottom = 24.dp),
             ) {
-                if (detailMeta != null) {
-                    WatchMetaSection(
-                        details = detailMeta.detail.details,
-                        titleFallback = displayTitle,
-                        currentLineLabel = lineLabel,
-                        lines = ready.links,
-                        selectedLineIndex = ready.lineIndex,
-                        linesStatus = LinesStatus.Ready,
-                        seasons = detailMeta.detail.seasons,
-                        selectedSeasonIndex = detailMeta.selectedSeasonIndex,
-                        selectedEpisode = currentEpisode,
-                        recommends = detailMeta.detail.recommends,
-                        onSelectLine = onSelectLine,
-                        onSelectSeason = onSelectSeason,
-                        onSelectEpisode = { _, ep, _ -> onSwitchEpisode(ep) },
-                        onOpenRecommend = onOpenRecommend,
-                        fallbackMediaId = mediaId,
-                        qualityLabels = qualityLabels,
-                        selectedQualityIndex = ready.sourceIndex,
-                        onSelectQuality = onSelectSource,
-                    )
-                } else {
-                    // Detail still loading — show Play Source from links so path is never empty.
-                    PlaySourceRow(
-                        lines = ready.links,
-                        selectedLineIndex = ready.lineIndex,
-                        linesStatus = LinesStatus.Ready,
-                        onSelectLine = onSelectLine,
-                        qualityLabels = qualityLabels,
-                        selectedQualityIndex = ready.sourceIndex,
-                        onSelectQuality = onSelectSource,
-                        modifier = Modifier.padding(top = 10.dp),
-                    )
-                }
+                // Always render the same WatchMetaSection instance. While the
+                // detail meta request is in flight it shows fixed-size skeletons
+                // above the already-real Play Source/Quality rows; when the meta
+                // arrives the slots crossfade in place and the source row never
+                // moves. Seasons/recommends are appended below after data arrives.
+                val meta = detailMeta?.detail
+                WatchMetaSection(
+                    details = meta?.details,
+                    titleFallback = displayTitle,
+                    currentLineLabel = lineLabel,
+                    lines = ready.links,
+                    selectedLineIndex = ready.lineIndex,
+                    linesStatus = LinesStatus.Ready,
+                    seasons = meta?.seasons.orEmpty(),
+                    selectedSeasonIndex = detailMeta?.selectedSeasonIndex ?: 0,
+                    selectedEpisode = currentEpisode,
+                    recommends = meta?.recommends.orEmpty(),
+                    onSelectLine = onSelectLine,
+                    onSelectSeason = onSelectSeason,
+                    onSelectEpisode = { _, ep, _ -> onSwitchEpisode(ep) },
+                    onOpenRecommend = onOpenRecommend,
+                    fallbackMediaId = mediaId,
+                    qualityLabels = qualityLabels,
+                    selectedQualityIndex = ready.sourceIndex,
+                    onSelectQuality = onSelectSource,
+                    loading = detailMetaLoading,
+                )
             }
         }
     }

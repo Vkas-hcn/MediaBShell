@@ -1,5 +1,9 @@
 package com.hdvideoplay.media.ui.detail
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -36,14 +40,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
 import com.hdvideoplay.media.R
 import com.hdvideoplay.media.data.dto.DetailInfoDto
 import com.hdvideoplay.media.data.dto.EpisodeDto
@@ -51,7 +55,13 @@ import com.hdvideoplay.media.data.dto.MediaItemDto
 import com.hdvideoplay.media.data.dto.OutsideLinkDto
 import com.hdvideoplay.media.data.dto.RecommendGroupDto
 import com.hdvideoplay.media.data.dto.SeasonDto
+import com.hdvideoplay.media.ui.components.AvatarImage
 import com.hdvideoplay.media.ui.components.MediaPosterCard
+import com.hdvideoplay.media.ui.components.SkeletonBar
+import com.hdvideoplay.media.ui.components.SkeletonCircle
+import com.hdvideoplay.media.ui.components.SkeletonMotion
+import com.hdvideoplay.media.ui.components.SkeletonSlot
+import com.hdvideoplay.media.ui.components.SkeletonTextLines
 import com.hdvideoplay.media.ui.theme.VideoPlayDimens
 import com.hdvideoplay.media.ui.theme.VideoPlayTokens
 import kotlin.text.CharCategory
@@ -72,6 +82,21 @@ private val SelectedSolidFg = Color.Black
 private val SelectedBorder = Color(0xFFFFB800)
 private val SelectedDot = Color(0xFFFBBF24)
 private val DimFg = VideoPlayTokens.Muted
+
+/** Fixed row heights shared by the skeleton and the real watch-meta layout. */
+private val SourceRowHeight = 32.dp
+
+@Composable
+private fun titleSlotHeight(): Dp =
+    with(LocalDensity.current) { 26.sp.toDp() * 2 + 2.dp }
+
+@Composable
+private fun metaRowHeight(): Dp =
+    with(LocalDensity.current) { 20.sp.toDp() }
+
+@Composable
+private fun overviewSlotHeight(): Dp =
+    with(LocalDensity.current) { 18.sp.toDp() * 3 + 2.dp }
 
 /** UI model for Cast tab — stage detail API currently has no cast payload. */
 data class CastMemberUi(
@@ -134,6 +159,11 @@ fun WatchMetaSection(
     runtimeText: String? = null,
     cast: List<CastMemberUi> = emptyList(),
     reviews: List<ReviewUi> = emptyList(),
+    /**
+     * True while detail metadata is still loading. Text slots show shimmer
+     * skeletons at their final fixed sizes; real text crossfades in when false.
+     */
+    loading: Boolean = false,
 ) {
     val title = details?.title.orEmpty().ifBlank { titleFallback }.ifBlank { "Untitled" }
     val year = details?.releaseDate?.take(4)?.takeIf { it.length == 4 && it.all(Char::isDigit) }
@@ -151,31 +181,64 @@ fun WatchMetaSection(
     val metaTrail = listOfNotNull(genreLabel, year, runtime).joinToString(" · ")
         .takeIf { it.isNotBlank() }
 
+    val titleHeight = titleSlotHeight()
+    val metaHeight = metaRowHeight()
+    val overviewHeight = overviewSlotHeight()
     var selectedTab by remember { mutableIntStateOf(0) }
 
     Column(modifier = modifier.fillMaxWidth()) {
-        // 1) Title ~20–22sp Bold white
-        Text(
-            text = title,
-            color = Color.White,
-            fontSize = 21.sp,
-            fontWeight = FontWeight.Bold,
-            lineHeight = 26.sp,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 10.dp),
+        // 1) Title ~20–22sp Bold white — fixed two-line slot, skeleton while loading.
+        SkeletonSlot(
+            loading = loading,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, top = 10.dp)
+                .height(titleHeight),
+            skeleton = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    SkeletonBar(height = 18.dp, widthFraction = 0.72f)
+                    SkeletonBar(height = 18.dp, widthFraction = 0.44f)
+                }
+            },
+            content = {
+                Text(
+                    text = title,
+                    color = Color.White,
+                    fontSize = 21.sp,
+                    fontWeight = FontWeight.Bold,
+                    lineHeight = 26.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
         )
 
-        // 2) Meta row: rating + quality badge + genre · year · runtime (hide missing)
-        if (rating != null || qualityBadge != null || metaTrail != null) {
-            Spacer(Modifier.height(8.dp))
-            WatchMetaInfoRow(
-                rating = rating,
-                qualityBadge = qualityBadge,
-                metaTrail = metaTrail,
-                modifier = Modifier.padding(horizontal = 16.dp),
-            )
-        }
+        // 2) Meta row: fixed height and skeleton even when the API has no meta.
+        Spacer(Modifier.height(8.dp))
+        SkeletonSlot(
+            loading = loading,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .height(metaHeight),
+            alignment = Alignment.CenterStart,
+            skeleton = {
+                SkeletonBar(height = 12.dp, widthFraction = 0.55f)
+            },
+            content = {
+                if (rating != null || qualityBadge != null || metaTrail != null) {
+                    WatchMetaInfoRow(
+                        rating = rating,
+                        qualityBadge = qualityBadge,
+                        metaTrail = metaTrail,
+                    )
+                }
+            },
+        )
 
         // 3) Tabs: Overview | Cast | Reviews — selected = AccentGold underline
         Spacer(Modifier.height(12.dp))
@@ -186,26 +249,15 @@ fun WatchMetaSection(
         )
 
         Spacer(Modifier.height(10.dp))
-        when (WatchMetaTab.entries[selectedTab.coerceIn(0, WatchMetaTab.entries.lastIndex)]) {
-            WatchMetaTab.Overview -> {
-                WatchOverviewBlock(
-                    overview = overview,
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                )
-            }
-            WatchMetaTab.Cast -> {
-                CastTabContent(
-                    cast = cast,
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                )
-            }
-            WatchMetaTab.Reviews -> {
-                ReviewsTabContent(
-                    reviews = reviews,
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                )
-            }
-        }
+        WatchMetaTabContent(
+            loading = loading,
+            selectedTab = selectedTab,
+            overview = overview,
+            overviewSlotHeight = overviewHeight,
+            cast = cast,
+            reviews = reviews,
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
 
         // 4) Play Source (custom capsules; selected AccentGold fill; no teal)
         Spacer(Modifier.height(14.dp))
@@ -220,30 +272,159 @@ fun WatchMetaSection(
             onSelectQuality = onSelectQuality,
         )
 
-        // 5) Season / episode chips — episode change still plays
-        if (!isMovie) {
-            Spacer(Modifier.height(14.dp))
-            SeasonEpisodePicker(
-                seasons = seasons,
-                selectedSeasonIndex = selectedSeasonIndex,
-                selectedEpisode = selectedEpisode,
-                fallbackMediaId = fallbackMediaId,
-                title = title,
-                onSelectSeason = onSelectSeason,
-                onSelectEpisode = onSelectEpisode,
-            )
+        // 5) Season / episode chips — appended below the fixed source row only
+        // after detail meta is known, so a movie never reserves a season gap.
+        AnimatedVisibility(
+            visible = !loading && !isMovie,
+            enter = fadeIn(tween(SkeletonMotion.FadeMs)),
+            exit = fadeOut(tween(SkeletonMotion.FadeMs)),
+        ) {
+            Column {
+                Spacer(Modifier.height(14.dp))
+                SeasonEpisodePicker(
+                    seasons = seasons,
+                    selectedSeasonIndex = selectedSeasonIndex,
+                    selectedEpisode = selectedEpisode,
+                    fallbackMediaId = fallbackMediaId,
+                    title = title,
+                    onSelectSeason = onSelectSeason,
+                    onSelectEpisode = onSelectEpisode,
+                )
+            }
         }
 
-        // 6) You May Also Like / MORE LIKE THIS — horizontal posters; no ✨; no teal
-        if (recommends.isNotEmpty()) {
-            Spacer(Modifier.height(16.dp))
-            recommends.forEach { group ->
-                RecommendSection(group = group, onOpen = onOpenRecommend)
-                Spacer(Modifier.height(12.dp))
+        // 6) You May Also Like / MORE LIKE THIS — trailing content, fade in only.
+        AnimatedVisibility(
+            visible = !loading && recommends.isNotEmpty(),
+            enter = fadeIn(tween(SkeletonMotion.FadeMs)),
+            exit = fadeOut(tween(SkeletonMotion.FadeMs)),
+        ) {
+            Column {
+                Spacer(Modifier.height(16.dp))
+                recommends.forEach { group ->
+                    RecommendSection(group = group, onOpen = onOpenRecommend)
+                    Spacer(Modifier.height(12.dp))
+                }
             }
         }
 
         // Favorites / Download: hidden (no backend this sprint).
+    }
+}
+
+/**
+ * Tab content: the default Overview keeps a fixed collapsed height so the
+ * Play Source row below never moves; Cast/Reviews use the same minimum height
+ * and compact skeletons while detail metadata is loading.
+ */
+@Composable
+private fun WatchMetaTabContent(
+    loading: Boolean,
+    selectedTab: Int,
+    overview: String,
+    overviewSlotHeight: Dp,
+    cast: List<CastMemberUi>,
+    reviews: List<ReviewUi>,
+    modifier: Modifier = Modifier,
+) {
+    val tab = WatchMetaTab.entries[selectedTab.coerceIn(0, WatchMetaTab.entries.lastIndex)]
+    when (tab) {
+        WatchMetaTab.Overview -> SkeletonSlot(
+            loading = loading,
+            modifier = modifier.fillMaxWidth(),
+            skeleton = {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(overviewSlotHeight),
+                ) {
+                    SkeletonTextLines(
+                        lineCount = 3,
+                        lineHeight = 12.dp,
+                        lineSpacing = 6.dp,
+                        widths = listOf(1f, 1f, 0.62f),
+                    )
+                }
+            },
+            content = {
+                WatchOverviewBlock(
+                    overview = overview,
+                    collapsedHeight = overviewSlotHeight,
+                )
+            },
+        )
+        WatchMetaTab.Cast -> SkeletonSlot(
+            loading = loading,
+            modifier = modifier.fillMaxWidth(),
+            skeleton = { CastTabSkeleton(overviewSlotHeight) },
+            content = {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = overviewSlotHeight),
+                ) {
+                    CastTabContent(cast = cast)
+                }
+            },
+        )
+        WatchMetaTab.Reviews -> SkeletonSlot(
+            loading = loading,
+            modifier = modifier.fillMaxWidth(),
+            skeleton = { ReviewsTabSkeleton(overviewSlotHeight) },
+            content = {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = overviewSlotHeight),
+                ) {
+                    ReviewsTabContent(reviews = reviews)
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun CastTabSkeleton(height: Dp) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(height),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            repeat(4) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    SkeletonCircle(size = 28.dp)
+                    Spacer(Modifier.height(6.dp))
+                    SkeletonBar(height = 8.dp, width = 44.dp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReviewsTabSkeleton(height: Dp) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(height),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SkeletonCircle(size = 36.dp)
+            Column(
+                modifier = Modifier.width(180.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                SkeletonBar(height = 10.dp, widthFraction = 0.55f)
+                SkeletonBar(height = 10.dp, widthFraction = 1f)
+            }
+        }
     }
 }
 
@@ -408,16 +589,30 @@ fun WatchOverviewBlock(
     overview: String,
     modifier: Modifier = Modifier,
     @Suppress("UNUSED_PARAMETER") genres: String = "",
+    /**
+     * Height reserved for the collapsed overview. Keeps a short synopsis from
+     * shrinking the block and moving Play Source upward after load.
+     */
+    collapsedHeight: Dp? = null,
 ) {
     var expanded by remember { mutableStateOf(false) }
     Column(modifier = modifier.fillMaxWidth()) {
         if (overview.isBlank()) {
-            Text(
-                text = stringResource(R.string.overview_empty),
-                color = VideoPlayTokens.Muted,
-                fontSize = 13.sp,
-                lineHeight = 18.sp,
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(
+                        if (collapsedHeight != null) Modifier.height(collapsedHeight)
+                        else Modifier,
+                    ),
+            ) {
+                Text(
+                    text = stringResource(R.string.overview_empty),
+                    color = VideoPlayTokens.Muted,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                )
+            }
             return
         }
         if (expanded) {
@@ -435,8 +630,15 @@ fun WatchOverviewBlock(
                 modifier = Modifier.clickable { expanded = false },
             )
         } else {
-            // 2–3 lines + More (muted/white, never teal)
-            Box(modifier = Modifier.fillMaxWidth()) {
+            // 2–3 lines + More (muted/white, never teal); fixed collapsed slot.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(
+                        if (collapsedHeight != null) Modifier.height(collapsedHeight)
+                        else Modifier,
+                    ),
+            ) {
                 Text(
                     text = overview,
                     color = Color.White,
@@ -508,30 +710,11 @@ private fun CastAvatarCell(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .size(56.dp)
-                .clip(CircleShape)
-                .background(VideoPlayTokens.ChipBg),
-        ) {
-            val url = member.avatarUrl?.takeIf { it.isNotBlank() }
-            if (url != null) {
-                AsyncImage(
-                    model = url,
-                    contentDescription = member.name,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxWidth().clip(CircleShape).size(56.dp),
-                )
-            } else {
-                Text(
-                    text = member.name.take(1).uppercase(),
-                    color = Color.White,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-        }
+        AvatarImage(
+            url = member.avatarUrl,
+            name = member.name,
+            size = 56.dp,
+        )
         Spacer(Modifier.height(6.dp))
         Text(
             text = member.name,
@@ -582,30 +765,12 @@ private fun ReviewRow(review: ReviewUi) {
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .size(36.dp)
-                .clip(CircleShape)
-                .background(VideoPlayTokens.ChipBg),
-        ) {
-            val url = review.avatarUrl?.takeIf { it.isNotBlank() }
-            if (url != null) {
-                AsyncImage(
-                    model = url,
-                    contentDescription = review.username,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.size(36.dp).clip(CircleShape),
-                )
-            } else {
-                Text(
-                    text = review.username.take(1).uppercase(),
-                    color = Color.White,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-        }
+        AvatarImage(
+            url = review.avatarUrl,
+            name = review.username,
+            size = 36.dp,
+            initialFontSize = 14.sp,
+        )
         Column(modifier = Modifier.weight(1f)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -691,68 +856,92 @@ fun PlaySourceRow(
             modifier = Modifier.padding(horizontal = 16.dp),
         )
         Spacer(Modifier.height(12.dp))
-        when (linesStatus) {
-            LinesStatus.Checking -> {
-                Text(
-                    text = stringResource(R.string.loading_links),
-                    color = VideoPlayTokens.Muted,
-                    fontSize = 13.sp,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                )
-            }
-            LinesStatus.None -> {
-                Text(
-                    text = stringResource(R.string.no_available_lines),
-                    color = VideoPlayTokens.Muted,
-                    fontSize = 13.sp,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                )
-            }
-            LinesStatus.Ready -> {
+        // One fixed 32dp row for Checking skeleton / None message / Ready chips.
+        SkeletonSlot(
+            loading = linesStatus == LinesStatus.Checking,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(SourceRowHeight),
+            alignment = Alignment.CenterStart,
+            skeleton = {
                 Row(
-                    modifier = Modifier
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp), // 稿: 12dp chip gap
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    lines.forEachIndexed { index, link ->
-                        val selected = index == selectedLineIndex
-                        val probeOk = lineProbeOk.getOrNull(index)
-                        val label = link.name.ifBlank { "Line ${index + 1}" }
-                        val dimmed = !selected && probeOk == false
-                        SourceCapsule(
-                            label = label,
-                            selected = selected,
-                            dimmed = dimmed,
-                            onClick = { onSelectLine(index) },
+                    repeat(3) { index ->
+                        SkeletonBar(
+                            height = 32.dp,
+                            width = if (index == 0) 76.dp else 66.dp,
+                            shape = CapsuleShape,
                         )
                     }
                 }
-                if (qualityLabels.size > 1) {
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        text = stringResource(R.string.quality),
-                        color = Color.White,
-                        fontSize = 14.sp,
-                        lineHeight = 20.sp,
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    Row(
-                        modifier = Modifier
-                            .horizontalScroll(rememberScrollState())
-                            .padding(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp), // 稿: 12dp chip gap
-                    ) {
-                        qualityLabels.forEachIndexed { index, label ->
-                            SourceCapsule(
-                                label = label,
-                                selected = index == selectedQualityIndex,
-                                onClick = { onSelectQuality(index) },
+            },
+            content = {
+                when (linesStatus) {
+                    LinesStatus.Checking -> Unit
+                    LinesStatus.None -> {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(SourceRowHeight)
+                                .padding(horizontal = 16.dp),
+                            contentAlignment = Alignment.CenterStart,
+                        ) {
+                            Text(
+                                text = stringResource(R.string.no_available_lines),
+                                color = VideoPlayTokens.Muted,
+                                fontSize = 13.sp,
                             )
                         }
                     }
+                    LinesStatus.Ready -> {
+                        Row(
+                            modifier = Modifier
+                                .horizontalScroll(rememberScrollState())
+                                .padding(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp), // 稿: 12dp chip gap
+                        ) {
+                            lines.forEachIndexed { index, link ->
+                                val selected = index == selectedLineIndex
+                                val probeOk = lineProbeOk.getOrNull(index)
+                                val label = link.name.ifBlank { "Line ${index + 1}" }
+                                val dimmed = !selected && probeOk == false
+                                SourceCapsule(
+                                    label = label,
+                                    selected = selected,
+                                    dimmed = dimmed,
+                                    onClick = { onSelectLine(index) },
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+        )
+        if (linesStatus == LinesStatus.Ready && qualityLabels.size > 1) {
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = stringResource(R.string.quality),
+                color = Color.White,
+                fontSize = 14.sp,
+                lineHeight = 20.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp), // 稿: 12dp chip gap
+            ) {
+                qualityLabels.forEachIndexed { index, label ->
+                    SourceCapsule(
+                        label = label,
+                        selected = index == selectedQualityIndex,
+                        onClick = { onSelectQuality(index) },
+                    )
                 }
             }
         }

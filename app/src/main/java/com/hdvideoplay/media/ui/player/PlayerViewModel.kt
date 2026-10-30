@@ -65,6 +65,10 @@ class PlayerViewModel(
     private val _detailMeta = MutableStateFlow<PlayerDetailMeta?>(null)
     val detailMeta: StateFlow<PlayerDetailMeta?> = _detailMeta.asStateFlow()
 
+    /** True until the detail-meta request completes (success or failure). */
+    private val _detailMetaLoading = MutableStateFlow(mediaId > 0)
+    val detailMetaLoading: StateFlow<Boolean> = _detailMetaLoading.asStateFlow()
+
     private val _currentEpisode = MutableStateFlow(initialEpisode)
     val currentEpisode: StateFlow<Int> = _currentEpisode.asStateFlow()
 
@@ -80,21 +84,29 @@ class PlayerViewModel(
     }
 
     private fun loadDetailMeta() {
-        if (mediaId <= 0) return
+        if (mediaId <= 0) {
+            _detailMetaLoading.value = false
+            return
+        }
         viewModelScope.launch {
-            val result = repo.detail(mediaId)
-            val data = result.getOrNull() ?: return@launch
-            if (data.details == null && data.seasons.isEmpty() && data.recommends.isEmpty()) {
-                return@launch
+            try {
+                val result = repo.detail(mediaId)
+                val data = result.getOrNull() ?: return@launch
+                if (data.details == null && data.seasons.isEmpty() && data.recommends.isEmpty()) {
+                    return@launch
+                }
+                // Prefer season that contains the current episode when possible.
+                val seasonIdx = data.seasons.indexOfFirst { season ->
+                    season.episodes.any { it.episodeNumber == episode }
+                }.let { if (it >= 0) it else 0 }
+                _detailMeta.value = PlayerDetailMeta(
+                    detail = data,
+                    selectedSeasonIndex = seasonIdx.coerceAtLeast(0),
+                )
+            } finally {
+                // Never leave the skeleton shimmering forever if detail fails.
+                _detailMetaLoading.value = false
             }
-            // Prefer season that contains the current episode when possible.
-            val seasonIdx = data.seasons.indexOfFirst { season ->
-                season.episodes.any { it.episodeNumber == episode }
-            }.let { if (it >= 0) it else 0 }
-            _detailMeta.value = PlayerDetailMeta(
-                detail = data,
-                selectedSeasonIndex = seasonIdx.coerceAtLeast(0),
-            )
         }
     }
 

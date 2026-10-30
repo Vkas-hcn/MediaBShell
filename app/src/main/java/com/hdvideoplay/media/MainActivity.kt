@@ -5,16 +5,12 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
 import com.hdvideoplay.media.ads.AdAnalytics
 import com.hdvideoplay.media.ads.AdGate
 import com.hdvideoplay.media.ads.AdLocation
@@ -22,9 +18,9 @@ import com.hdvideoplay.media.ads.AdScenes
 import com.hdvideoplay.media.ads.AdScheduler
 import com.hdvideoplay.media.ui.nav.AppNav
 import com.hdvideoplay.media.ui.splash.ColdStartPhase
+import com.hdvideoplay.media.ui.splash.SplashBackdrop
 import com.hdvideoplay.media.ui.splash.SplashLoadingScreen
 import com.hdvideoplay.media.ui.theme.MediaTheme
-import com.hdvideoplay.media.ui.theme.PageBg
 import kotlinx.coroutines.delay
 
 /**
@@ -74,12 +70,9 @@ class MainActivity : ComponentActivity() {
                                 phase = ColdStartPhase.Ready
                             }
                         }
-                        // Dark hold while AOA shows (SDK owns fullscreen). No fake CTA.
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(PageBg),
-                        )
+                        // Keep the designed splash visible while the cold App Open
+                        // creative is still loading. SDK owns fullscreen when it shows.
+                        SplashBackdrop(progress = 1f)
                     }
                     ColdStartPhase.Ready -> AppNav()
                 }
