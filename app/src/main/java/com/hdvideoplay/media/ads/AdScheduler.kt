@@ -5,12 +5,7 @@ import android.app.Application
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
-import androidx.lifecycle.DefaultLifecycleObserver
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.ProcessLifecycleOwner
 import com.google.android.gms.ads.MobileAds
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -28,14 +23,14 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Locations: first_splash_cold / splash_cold / splash_hot / return_ad / fullscreen_shell
  *
  * V2 (高靖):
- * - Hot resume MUST attempt Show splash_hot (preload skip must not swallow Show)
+ * - Hot foreground orchestration lives in HotStartManager; this object loads/shows
  * - Cold 10s quiet forbids business emits (splash excluded)
  * - Interstitial-feel paths use [AdLogicV2.emitPairedInterstitialFeel] (成对)
  * - V2 paths never call InterstitialAd API (NATIVE / App Open only)
  *
  * Acceptance = show / waterfall / dismiss only. NEVER auto-click ad CTAs.
  */
-object AdScheduler : DefaultLifecycleObserver, Application.ActivityLifecycleCallbacks {
+object AdScheduler : Application.ActivityLifecycleCallbacks {
 
     private const val TAG = "AdScheduler"
     private const val PREFS = "ad_scheduler_prefs"
@@ -48,18 +43,13 @@ object AdScheduler : DefaultLifecycleObserver, Application.ActivityLifecycleCall
     private val loaders = ConcurrentHashMap<AdFormat, AdFormatLoader>()
     private val controllers = ConcurrentHashMap<String, SceneController>()
 
-    private val mainHandler = Handler(Looper.getMainLooper())
     private val sdkReady = AtomicBoolean(false)
     private val showing = AtomicBoolean(false)
 
     @Volatile private var currentActivity: Activity? = null
-    @Volatile private var appInForeground = true
-    @Volatile private var wasBackgrounded = false
     @Volatile private var lastShowAtMs = 0L
     @Volatile private var coldSceneName: String = AdScenes.COLD_OPEN_A
     @Volatile private var initialized = false
-    /** Suppress one warm App Open when cold splash itself just finished (avoid double). */
-    @Volatile private var suppressNextHotShow = false
 
     /** Optional: employee2 may replace / add loaders after [init]. */
     fun registerLoader(loader: AdFormatLoader) {
@@ -85,9 +75,6 @@ object AdScheduler : DefaultLifecycleObserver, Application.ActivityLifecycleCall
         ensureControllers()
 
         application.registerActivityLifecycleCallbacks(this)
-        mainHandler.post {
-            ProcessLifecycleOwner.get().lifecycle.addObserver(this)
-        }
 
         MobileAds.initialize(application) {
             sdkReady.set(true)
@@ -148,6 +135,12 @@ object AdScheduler : DefaultLifecycleObserver, Application.ActivityLifecycleCall
         if (cur != null && !cur.isFinishing && !cur.isDestroyed) return cur
         return fallback?.takeUnless { it.isFinishing || it.isDestroyed }
     }
+
+    /** True from fullscreen show start until its dismiss/failure callback. */
+    fun isShowingAd(): Boolean = showing.get()
+
+    /** Hot App Open must respect the same hd_ad_interval as the show path. */
+    fun canShowHotSplash(): Boolean = passesInterval(AdLocation.SPLASH_HOT)
 
     // --- Load API (装弹) ---
 
@@ -381,76 +374,6 @@ object AdScheduler : DefaultLifecycleObserver, Application.ActivityLifecycleCall
         val intervalMs = AdPolicy.adIntervalMs()
         if (intervalMs <= 0) return true
         return System.currentTimeMillis() - lastShowAtMs >= intervalMs
-    }
-
-    // --- Warm start (App Open) — V2 A: MUST Show splash_hot ---
-
-    override fun onStart(owner: LifecycleOwner) {
-        appInForeground = true
-        if (wasBackgrounded) {
-            wasBackgrounded = false
-            if (suppressNextHotShow) {
-                suppressNextHotShow = false
-                Log.d(TAG, "warm resume: suppressNextHotShow consumed")
-                return
-            }
-            val act = currentActivity
-            if (act != null && !act.isFinishing && !act.isDestroyed) {
-                attemptHotSplashMustShow(act)
-            }
-        }
-    }
-
-    /**
-     * V2 A: warm resume always attempts Show splash_hot.
-     * Preload may still skip when cold Ready, but Show uses any Ready open inventory;
-     * if Empty, forcePreloadHot and retry once — never silently swallow Show.
-     */
-    private fun attemptHotSplashMustShow(act: Activity) {
-        Log.i(TAG, "V2 hot resume: attempt splash_hot App Open")
-        // Hot must ignore the cold-ready skip: hot_open owns the warm App Open slot.
-        forcePreloadHot()
-        mainHandler.postDelayed({
-            val live = currentActivityOr(act) ?: return@postDelayed
-            if (showing.get()) {
-                // Retry shortly — do not drop the must-show permanently.
-                Log.d(TAG, "hot must-show deferred — already showing")
-                mainHandler.postDelayed({ attemptHotSplashShowOnce(live, retried = true) }, 600L)
-                return@postDelayed
-            }
-            attemptHotSplashShowOnce(live, retried = false)
-        }, 400L)
-    }
-
-    private fun attemptHotSplashShowOnce(act: Activity, retried: Boolean) {
-        val started = showInternal(
-            location = AdLocation.SPLASH_HOT,
-            activity = act,
-            bypassInterval = false,
-            pairSegment = false,
-            preferredFormat = AdFormat.LAUNCH_SCREEN,
-            onDismiss = { shown ->
-                Log.i(TAG, "hot splash_hot dismiss shown=$shown (standalone App Open, not 成对)")
-            },
-        )
-        if (started) return
-        if (retried) {
-            Log.w(TAG, "hot must-show: still Empty after retry")
-            return
-        }
-        // Empty — force hot load bypassing cold Ready skip, then retry Show once.
-        Log.i(TAG, "hot must-show Empty → forcePreloadHot + retry")
-        forcePreloadHot()
-        mainHandler.postDelayed({
-            val live = currentActivityOr(act) ?: return@postDelayed
-            if (showing.get()) return@postDelayed
-            attemptHotSplashShowOnce(live, retried = true)
-        }, 1200L)
-    }
-
-    override fun onStop(owner: LifecycleOwner) {
-        appInForeground = false
-        wasBackgrounded = true
     }
 
     // --- Activity tracking ---

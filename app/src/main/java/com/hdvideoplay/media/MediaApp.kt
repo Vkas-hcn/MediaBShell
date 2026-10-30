@@ -3,6 +3,7 @@ package com.hdvideoplay.media
 import android.app.Application
 import com.hdvideoplay.media.ads.AdScheduler
 import com.hdvideoplay.media.data.local.WatchHistoryRepository
+import com.hdvideoplay.media.startup.HotStartManager
 
 class MediaApp : Application() {
     override fun onCreate() {
@@ -10,5 +11,6 @@ class MediaApp : Application() {
         WatchHistoryRepository.init(this)
         // AdMob + scene bus (Load≠Show). Employee1: App Open cold/warm.
         AdScheduler.init(this)
+        HotStartManager.init(this)
     }
 }

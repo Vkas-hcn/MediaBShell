@@ -316,9 +316,6 @@ fun AppNav() {
             composable(Routes.MY) {
                 MyScreen(
                     onOpenHistory = { navController.navigate(Routes.HISTORY) },
-                    onOpenDownloads = { navController.navigate(Routes.DOWNLOADS) },
-                    onOpenSettings = { navController.navigate(Routes.SETTINGS) },
-                    onOpenAbout = { navController.navigate(Routes.ABOUT) },
                     onOpenFavorites = { navController.navigate(Routes.FAVORITES) },
                 )
             }

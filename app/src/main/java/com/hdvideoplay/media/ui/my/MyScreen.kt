@@ -49,14 +49,11 @@ import com.hdvideoplay.media.ui.theme.VideoPlayTokens
 
 /**
  * Lanhu My — Continue Watching (gold progress), Favorites / My List,
- * Other card: History / Downloads / Settings / About.
+ * Other card: History only.
  */
 @Composable
 fun MyScreen(
     onOpenHistory: () -> Unit = {},
-    onOpenDownloads: () -> Unit = {},
-    onOpenSettings: () -> Unit = {},
-    onOpenAbout: () -> Unit = {},
     onOpenFavorites: () -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -109,12 +106,7 @@ fun MyScreen(
             )
         }
         item(key = "other") {
-            OtherMenuCard(
-                onHistory = onOpenHistory,
-                onDownloads = onOpenDownloads,
-                onSettings = onOpenSettings,
-                onAbout = onOpenAbout,
-            )
+            OtherMenuCard(onHistory = onOpenHistory)
         }
     }
 }
@@ -268,9 +260,6 @@ private fun ContinuePoster(
 @Composable
 private fun OtherMenuCard(
     onHistory: () -> Unit,
-    onDownloads: () -> Unit,
-    onSettings: () -> Unit,
-    onAbout: () -> Unit,
 ) {
     Column(
         Modifier
@@ -294,41 +283,8 @@ private fun OtherMenuCard(
                 label = stringResource(R.string.my_history),
                 onClick = onHistory,
             )
-            MenuDivider()
-            MyMenuRow(
-                icon = NavIcons.Download,
-                iconTint = Color(0xFF22C55E),
-                label = stringResource(R.string.my_downloads),
-                onClick = onDownloads,
-            )
-            MenuDivider()
-            MyMenuRow(
-                icon = NavIcons.Settings,
-                iconTint = VideoPlayTokens.AccentGold,
-                label = stringResource(R.string.my_settings),
-                onClick = onSettings,
-            )
-            MenuDivider()
-            MyMenuRow(
-                icon = NavIcons.About,
-                iconTint = Color(0xFFA855F7),
-                label = stringResource(R.string.my_about),
-                onClick = onAbout,
-            )
         }
     }
-}
-
-@Composable
-private fun MenuDivider() {
-    Spacer(Modifier.height(12.dp))
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .height(1.dp)
-            .background(Color(0xFF1C1F26)),
-    )
-    Spacer(Modifier.height(12.dp))
 }
 
 @Composable

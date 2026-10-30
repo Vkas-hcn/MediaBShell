@@ -84,7 +84,7 @@ private val SelectedDot = Color(0xFFFBBF24)
 private val DimFg = VideoPlayTokens.Muted
 
 /** Fixed row heights shared by the skeleton and the real watch-meta layout. */
-private val SourceRowHeight = 32.dp
+private val SourceRowHeight = 28.dp
 
 @Composable
 private fun titleSlotHeight(): Dp =
@@ -870,8 +870,8 @@ fun PlaySourceRow(
                 ) {
                     repeat(3) { index ->
                         SkeletonBar(
-                            height = 32.dp,
-                            width = if (index == 0) 76.dp else 66.dp,
+                            height = 28.dp,
+                            width = if (index == 0) 68.dp else 58.dp,
                             shape = CapsuleShape,
                         )
                     }
@@ -911,6 +911,7 @@ fun PlaySourceRow(
                                     label = label,
                                     selected = selected,
                                     dimmed = dimmed,
+                                    compact = true,
                                     onClick = { onSelectLine(index) },
                                 )
                             }
@@ -940,6 +941,7 @@ fun PlaySourceRow(
                     SourceCapsule(
                         label = label,
                         selected = index == selectedQualityIndex,
+                        compact = true,
                         onClick = { onSelectQuality(index) },
                     )
                 }
@@ -956,7 +958,15 @@ fun SourceCapsule(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     dimmed: Boolean = false,
+    compact: Boolean = false,
 ) {
+    val height = if (compact) 28.dp else 32.dp
+    val maxWidth = if (compact) 140.dp else 160.dp
+    val horizontalPadding = if (compact) 10.dp else 12.dp
+    val fontSize = if (compact) 11.sp else 12.sp
+    val lineHeight = if (compact) 14.sp else 16.sp
+    val dotSize = if (compact) 7.dp else 8.dp
+    val dotGap = if (compact) 3.dp else 4.dp
     val bgBrush = if (selected) {
         Brush.horizontalGradient(listOf(SelectedGradientStart, SelectedGradientEnd))
     } else {
@@ -970,27 +980,27 @@ fun SourceCapsule(
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
-            .widthIn(max = 160.dp)
-            .height(32.dp)
+            .widthIn(max = maxWidth)
+            .height(height)
             .clip(CapsuleShape)
             .background(bgBrush)
             .border(1.dp, if (selected) SelectedBorder else UnselectedBorder, CapsuleShape)
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp),
+            .padding(horizontal = horizontalPadding),
     ) {
         if (selected) {
             Box(
                 Modifier
-                    .size(8.dp)
+                    .size(dotSize)
                     .background(SelectedDot, CircleShape),
             )
-            Spacer(Modifier.width(4.dp))
+            Spacer(Modifier.width(dotGap))
         }
         Text(
             text = label,
             color = fg,
-            fontSize = 12.sp,
-            lineHeight = 16.sp,
+            fontSize = fontSize,
+            lineHeight = lineHeight,
             fontWeight = FontWeight.Normal,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -1029,6 +1039,7 @@ fun SeasonEpisodePicker(
                 SourceCapsule(
                     label = season.name.ifBlank { "S${season.seasonNumber}" },
                     selected = index == selectedSeasonIndex,
+                    compact = true,
                     onClick = { onSelectSeason(index) },
                 )
             }
@@ -1086,7 +1097,7 @@ private fun EpisodeNumberChip(
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
-            .size(40.dp)
+            .size(34.dp)
             .background(bg, shape)
             .then(
                 if (selected) Modifier
@@ -1097,7 +1108,7 @@ private fun EpisodeNumberChip(
         Text(
             text = number.toString(),
             color = fg,
-            fontSize = 13.sp,
+            fontSize = 11.sp,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
         )
     }

@@ -127,12 +127,6 @@ fun SearchScreen(
             )
         }
 
-        if (ui.showTrendingTabs) {
-            TrendingTabRow(
-                category = ui.category,
-                onSelect = viewModel::setCategory,
-            )
-        }
         if (ui.showFilterChips) {
             SearchFilterChips(
                 genres = ui.genres,
@@ -331,66 +325,6 @@ private fun FilterChip(
             fontFamily = VideoPlayFontFamily,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-@Composable
-private fun TrendingTabRow(
-    category: Int,
-    onSelect: (Int) -> Unit,
-) {
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .height(36.dp)
-            .padding(horizontal = 12.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(28.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            TrendingTab(
-                label = stringResource(R.string.trending_movies),
-                selected = category == 1,
-                onClick = { onSelect(1) },
-            )
-            TrendingTab(
-                label = stringResource(R.string.trending_tv),
-                selected = category == 2,
-                onClick = { onSelect(2) },
-            )
-        }
-    }
-}
-
-@Composable
-private fun TrendingTab(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .clickable(onClick = onClick)
-            .padding(vertical = 2.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            text = label,
-            color = if (selected) PrimaryText else MutedText,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            fontSize = 14.sp,
-            lineHeight = 18.sp,
-            fontFamily = VideoPlayFontFamily,
-            modifier = Modifier.padding(bottom = 4.dp),
-        )
-        Box(
-            modifier = Modifier
-                .height(2.dp)
-                .fillMaxWidth()
-                .background(if (selected) BrandGold else Color.Transparent),
         )
     }
 }

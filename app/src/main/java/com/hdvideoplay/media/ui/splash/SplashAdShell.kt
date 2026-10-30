@@ -134,9 +134,3 @@ fun SplashAdShell(
     }
 }
 
-/** Cold-start phase for MainActivity. */
-enum class ColdStartPhase {
-    Loading,
-    AdShell,
-    Ready,
-}
