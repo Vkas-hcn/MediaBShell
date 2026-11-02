@@ -63,6 +63,10 @@ class PlayerViewModel(
     private val _linksState = MutableStateFlow<UiState<PlayerReady>>(UiState.Loading)
     val linksState: StateFlow<UiState<PlayerReady>> = _linksState.asStateFlow()
 
+    /** True while the all-line probe runs for the selected episode. */
+    private val _linksProbing = MutableStateFlow(false)
+    val linksProbing: StateFlow<Boolean> = _linksProbing.asStateFlow()
+
     private val _detailMeta = MutableStateFlow<PlayerDetailMeta?>(null)
     val detailMeta: StateFlow<PlayerDetailMeta?> = _detailMeta.asStateFlow()
 
@@ -137,37 +141,62 @@ class PlayerViewModel(
             }
 
             // Probe every line/source concurrently before publishing playback.
-            // The player shell shows its skeleton while this runs.
-            val probed = try {
-                PlaySourceProbe.probeLinks(raw)
-            } catch (ce: kotlinx.coroutines.CancellationException) {
-                throw ce
-            } catch (_: Throwable) {
-                raw.map { PlaySourceProbe.ProbedLink(it, List(it.list.size) { false }) }
-            }
-            val orderedProbed = PlaySourceProbe.validFirst(probed)
-            val firstValid = orderedProbed.indexOfFirst { it.isValid }
-            if (firstValid < 0) {
-                _linksState.value = UiState.Error("no_alive_links")
-                return@launch
-            }
+            // The player surface shows its circular indicator while this runs.
+            _linksProbing.value = true
+            try {
+                val outcome = try {
+                    PlaySourceProbe.probeLinksTimed(raw, PlaySourceProbe.PROBE_TIMEOUT_MS)
+                } catch (ce: kotlinx.coroutines.CancellationException) {
+                    throw ce
+                } catch (_: Throwable) {
+                    PlaySourceProbe.ProbeOutcome(
+                        probed = raw.map {
+                            PlaySourceProbe.ProbedLink(it, List(it.list.size) { false })
+                        },
+                        timedOut = false,
+                    )
+                }
+                val probed = outcome.probed
 
-            val ordered = orderedProbed.map { it.orderedLink() }
-            // Detail passes its post-probe line index; direct content opens at 0.
-            // Keep an explicit valid selection, otherwise fall back to first verified.
-            val requested = initialLineIndex.takeIf { it in orderedProbed.indices }
-            val line = if (requested != null && orderedProbed[requested].isValid) {
-                requested
-            } else {
-                firstValid
+                if (outcome.timedOut && probed.none { it.isValid }) {
+                    // Deadline hit without a playable source: play the config order.
+                    val requested = initialLineIndex.coerceIn(0, raw.lastIndex)
+                    _linksState.value = UiState.Success(
+                        PlayerReady(
+                            links = raw,
+                            lineIndex = requested,
+                            sourceIndex = 0,
+                        ),
+                    )
+                    return@launch
+                }
+
+                val orderedProbed = PlaySourceProbe.validFirst(probed)
+                val firstValid = orderedProbed.indexOfFirst { it.isValid }
+                if (firstValid < 0) {
+                    _linksState.value = UiState.Error("no_alive_links")
+                    return@launch
+                }
+
+                val ordered = orderedProbed.map { it.orderedLink() }
+                // Detail passes its post-probe line index; direct content opens at 0.
+                // Keep an explicit valid selection, otherwise fall back to first verified.
+                val requestedValid = initialLineIndex.takeIf { it in orderedProbed.indices }
+                val line = if (requestedValid != null && orderedProbed[requestedValid].isValid) {
+                    requestedValid
+                } else {
+                    firstValid
+                }
+                _linksState.value = UiState.Success(
+                    PlayerReady(
+                        links = ordered,
+                        lineIndex = line.coerceIn(0, ordered.lastIndex),
+                        sourceIndex = 0,
+                    ),
+                )
+            } finally {
+                _linksProbing.value = false
             }
-            _linksState.value = UiState.Success(
-                PlayerReady(
-                    links = ordered,
-                    lineIndex = line.coerceIn(0, ordered.lastIndex),
-                    sourceIndex = 0,
-                ),
-            )
         }
     }
 

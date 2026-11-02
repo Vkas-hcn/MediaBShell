@@ -10,10 +10,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.Request
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Optional **weak** play-source probe (HEAD → Range → GET).
@@ -29,6 +33,15 @@ object PlaySourceProbe {
 
     private const val TAG = "PlaySourceProbe"
     private const val MAX_CONCURRENCY = 8
+
+    /** Whole-line-set probe deadline. On timeout callers fall back to config order. */
+    const val PROBE_TIMEOUT_MS = 10_000L
+
+    /** Timed probe result. [timedOut] means not every source finished in time. */
+    data class ProbeOutcome(
+        val probed: List<ProbedLink>,
+        val timedOut: Boolean,
+    )
 
     /** Per-line probe result. [sourceFlags] aligns with the original source list. */
     data class ProbedLink(
@@ -88,6 +101,61 @@ object PlaySourceProbe {
                 sourceFlags = flags.getOrElse(index) { List(link.list.size) { false } },
             )
         }
+    }
+
+    /**
+     * Probe all lines/sources with an overall deadline. When the deadline hits,
+     * the partial results collected so far are returned with [ProbeOutcome.timedOut].
+     * Callers decide whether to keep the partial valid-first order or fall back
+     * to the config order when no playable source was found.
+     */
+    suspend fun probeLinksTimed(
+        links: List<OutsideLinkDto>,
+        timeoutMs: Long = PROBE_TIMEOUT_MS,
+    ): ProbeOutcome {
+        if (links.isEmpty()) return ProbeOutcome(emptyList(), timedOut = false)
+
+        val states: List<MutableList<Boolean>> =
+            links.map { link -> MutableList(link.list.size) { false } }
+        val total = links.sumOf { it.list.size }
+        val completed = AtomicInteger(0)
+
+        val finished: Unit? = if (timeoutMs > 0L) {
+            withTimeoutOrNull(timeoutMs) {
+                runProbeLoop(links, states, completed, total)
+            }
+        } else {
+            runProbeLoop(links, states, completed, total)
+            Unit
+        }
+
+        val probed = links.mapIndexed { index, link ->
+            ProbedLink(link = link, sourceFlags = states[index].toList())
+        }
+        return ProbeOutcome(probed = probed, timedOut = finished == null)
+    }
+
+    private suspend fun runProbeLoop(
+        links: List<OutsideLinkDto>,
+        states: List<MutableList<Boolean>>,
+        completed: AtomicInteger,
+        total: Int,
+    ) {
+        coroutineScope {
+            links.forEachIndexed { lineIndex, link ->
+                link.list.forEachIndexed { sourceIndex, src ->
+                    launch {
+                        states[lineIndex][sourceIndex] =
+                            if (src.url.isBlank()) false else probe(src)
+                        completed.incrementAndGet()
+                    }
+                }
+            }
+            while (completed.get() < total) {
+                delay(20L)
+            }
+        }
+        Unit
     }
 
     /** Stable partition: playable lines first, unplayable lines after. */

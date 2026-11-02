@@ -138,13 +138,23 @@ class DetailViewModel(
         }
 
         // Keep LinesStatus.Checking while this runs; PlaySourceRow stays skeleton.
-        val probed = try {
-            PlaySourceProbe.probeLinks(raw)
+        val outcome = try {
+            PlaySourceProbe.probeLinksTimed(raw, PlaySourceProbe.PROBE_TIMEOUT_MS)
         } catch (ce: CancellationException) {
             throw ce
         } catch (_: Throwable) {
-            // Probe infrastructure failed: keep API lines but mark them unknown.
-            raw.map { PlaySourceProbe.ProbedLink(it, List(it.list.size) { false }) }
+            PlaySourceProbe.ProbeOutcome(
+                probed = raw.map {
+                    PlaySourceProbe.ProbedLink(it, List(it.list.size) { false })
+                },
+                timedOut = false,
+            )
+        }
+        val probed = outcome.probed
+        if (outcome.timedOut && probed.none { it.isValid }) {
+            // Deadline hit without a playable source: show the config order.
+            publishLines(raw, List(raw.size) { null }, LinesStatus.Ready, 0)
+            return
         }
         val ordered = PlaySourceProbe.validFirst(probed)
         val flags = ordered.map { it.isValid }
@@ -155,7 +165,7 @@ class DetailViewModel(
 
     private fun publishLines(
         lines: List<OutsideLinkDto>,
-        flags: List<Boolean>,
+        flags: List<Boolean?>,
         status: LinesStatus,
         selected: Int = 0,
     ) {

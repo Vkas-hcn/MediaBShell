@@ -136,8 +136,9 @@ private fun DetailContent(
     val isMovie = model?.isMovie ?: true
     val lines = model?.lines.orEmpty()
     val selectedLineIndex = model?.selectedLineIndex ?: 0
+    // null = unknown (timeout fallback reverted to config order) → allow autoplay.
     val selectedLinePlayable =
-        model?.lineProbeOk?.getOrNull(selectedLineIndex) == true
+        model?.lineProbeOk?.getOrNull(selectedLineIndex) != false
     val linesStatus = model?.linesStatus ?: LinesStatus.Checking
     val seasons = model?.seasons.orEmpty()
     val recommends = model?.detail?.recommends.orEmpty()

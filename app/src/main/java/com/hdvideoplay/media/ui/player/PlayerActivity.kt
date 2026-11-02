@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
@@ -189,6 +190,7 @@ class PlayerActivity : ComponentActivity() {
                     ),
                 )
                 val state by viewModel.linksState.collectAsStateWithLifecycle()
+                val linksProbing by viewModel.linksProbing.collectAsStateWithLifecycle()
                 val context = LocalContext.current
                 // Re-read on every composition so UI error mapping matches current Intent.
                 val currentMediaId = mediaIdOf()
@@ -299,6 +301,7 @@ class PlayerActivity : ComponentActivity() {
                                 detailMetaLoading = detailMetaLoading,
                                 currentEpisode = currentEpisode,
                                 startPositionMs = initialStartPositionMs,
+                                linksProbing = linksProbing,
                                 onBack = { attemptReturnAdThenFinish() },
                                 onSelectLine = viewModel::selectLine,
                                 onSelectSource = viewModel::selectSource,
@@ -596,6 +599,7 @@ private fun PlayerContent(
     detailMetaLoading: Boolean,
     currentEpisode: Int,
     startPositionMs: Long = 0L,
+    linksProbing: Boolean = false,
     onBack: () -> Unit,
     onSelectLine: (Int) -> Unit,
     onSelectSource: (Int) -> Unit,
@@ -638,6 +642,10 @@ private fun PlayerContent(
     var initialHistoryWritten by remember { mutableStateOf(false) }
     var playerEverReady by remember { mutableStateOf(false) }
     var initialSeekApplied by remember { mutableStateOf(false) }
+    // PlayerContent mounts only when it is about to prepare a source; keep the
+    // controls hidden until the first READY frame so the spinner is alone.
+    var isSwitchingSource by remember { mutableStateOf(true) }
+    var isBuffering by remember { mutableStateOf(false) }
     val titleLatest = rememberUpdatedState(title)
     val detailMetaLatest = rememberUpdatedState(detailMeta)
     val episodeLatest = rememberUpdatedState(currentEpisode)
@@ -705,8 +713,10 @@ private fun PlayerContent(
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
+                isBuffering = playbackState == Player.STATE_BUFFERING
                 if (playbackState == Player.STATE_READY) {
                     playerEverReady = true
+                    isBuffering = false
                 }
             }
 
@@ -784,13 +794,19 @@ private fun PlayerContent(
     LaunchedEffect(ready.lineIndex, ready.sourceIndex, source?.url, headersKey) {
         val src = source
         if (src == null || src.url.isBlank()) {
+            isSwitchingSource = false
+            isBuffering = false
             onFailedLatest.value()
             return@LaunchedEffect
         }
+        isSwitchingSource = true
         val successOnce = AtomicBoolean(false)
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
+                isBuffering = playbackState == Player.STATE_BUFFERING
                 if (playbackState == Player.STATE_READY && successOnce.compareAndSet(false, true)) {
+                    isSwitchingSource = false
+                    isBuffering = false
                     if (!initialSeekApplied) {
                         initialSeekApplied = true
                         if (startPositionMs > 0L) {
@@ -810,6 +826,8 @@ private fun PlayerContent(
             }
 
             override fun onPlayerError(error: PlaybackException) {
+                isSwitchingSource = false
+                isBuffering = false
                 Log.e(
                     "PlayerActivity",
                     "playbackError code=${error.errorCode} name=${error.errorCodeName} msg=${error.message} cause=${error.cause}",
@@ -830,6 +848,8 @@ private fun PlayerContent(
             // Line/quality change or failover cancels this effect — must NOT treat as play failure.
             throw ce
         } catch (_: Throwable) {
+            isSwitchingSource = false
+            isBuffering = false
             onFailedLatest.value()
         } finally {
             player.removeListener(listener)
@@ -889,6 +909,12 @@ private fun PlayerContent(
                     update = { it.player = player },
                     modifier = Modifier.fillMaxSize(),
                 )
+                if (isSwitchingSource || isBuffering || linksProbing) {
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        modifier = Modifier.align(Alignment.Center),
+                    )
+                }
             }
             val episodeNumbers = detailMeta
                 ?.let { meta ->
@@ -899,7 +925,10 @@ private fun PlayerContent(
                         .orEmpty()
                 }
                 .orEmpty()
-            PlayerControlsHost(
+            val showPlayerControls =
+                playerEverReady && !isSwitchingSource && !isBuffering && !linksProbing
+            if (showPlayerControls) {
+                PlayerControlsHost(
                 landscape = landscape,
                 state = PlayerControlsState(
                     title = displayTitle,
@@ -957,10 +986,11 @@ private fun PlayerContent(
                     locked = !locked
                     if (locked) showSourcePanel = false
                 },
-                onOpenSourcePanel = {
-                    showSourcePanel = !showSourcePanel
-                },
-            )
+                    onOpenSourcePanel = {
+                        showSourcePanel = !showSourcePanel
+                    },
+                )
+            }
             // V9 design: Settings opens bottom Source/Quality panel (scrim + surface).
             if (landscape && !locked && showSourcePanel) {
                 BackHandler { showSourcePanel = false }
