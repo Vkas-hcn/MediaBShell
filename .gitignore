@@ -7,7 +7,9 @@ build/
 captures/
 .cxx/
 .externalNativeBuild/
-
+/qa-evidence
+/design
+/app/src/test
 # Local machine config (SDK path, per-machine)
 local.properties
 
