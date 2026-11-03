@@ -51,6 +51,7 @@ class MediaApp : Application() {
     }
 
     private fun initTrackSdk() {
+        //BI 埋点平台初始化
         runCatching {
             val trackConfig = TrackConfig.Builder(this)
                 .baseUrl(
@@ -90,6 +91,7 @@ class MediaApp : Application() {
     @SuppressLint("HardwareIds")
     private fun initAdJust(application: Application) {
         val deviceId = TrackSDK.getInstance().effectiveDistinctId
+        //TODO 正式环境填入对应appToken
         val appToken = ""
         val environment: String = if (BuildConfig.DEBUG) {
             AdjustConfig.ENVIRONMENT_SANDBOX

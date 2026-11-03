@@ -67,3 +67,9 @@
 - SplashActivity：notifRequested 实例标志 + permissionHost.requestNotification(systemOnly=true)（同意/拒绝/返回键均不阻塞广告流程）。
 - HotStartManager：最小增量 ignoreNextBackgroundReturn(reason)（onStop 清标记并跳过热启动武装；阶段 4 重写时保留该 API）。
 - 测试：移植 NotificationPermissionRulesTest；验证 :app:assembleDebug + :app:testDebugUnitTest 通过。
+### 阶段 4（2026-11-03，完成）
+
+- HotStartManager 整体重写为 HyperVideo 语义：onStop（processInForeground=false→dismissCurrentAdActivity→ignoreNextBackgroundReturn 检查→hasSeenForeground 检查→forcePreloadHot+300ms scheduleArm→armed+finishNonWhitelisted）；onStart（cancelPendingArm→shouldLaunch=armed&&hasSeenForeground→post launchReturnToGuide）；launchReturnToGuide（屏幕未点亮跳过、栈顶 SplashActivity 跳过、createReturnToMainIntent NEW_TASK|CLEAR_TASK、失败回退 launchPlainHotStart SINGLE_TOP）；新增 ActivityLifecycleCallbacks（adActivity 弱引用 + contentActivities 集合）、relaunchGuideForHotStart（300ms 延迟清栈重拉）；删除直接展示分支；保留 isAppForeground() 与 ignoreNextBackgroundReturn()。
+- SplashActivity 增强：EXTRA_RETURN_TO_MAIN/EXTRA_FROM_FCM 常量与 createReturnToMainIntent/createHotStartIntent/createNotificationClickIntent 工厂；进程级 startupEpoch/processAlreadyEntered；onCreate：reportNotificationClickIfNeeded（CO_SHOW_TYPE→HintUtil.cancelNewsNotification；实例内一次 news_notification_click 埋点；EXTRA_FROM_FCM 也上报）+ 热启动且广告展示中→startupEpoch++→restartStartupAfterDismissingAd（50ms 轮询、1500ms 上限）；onNewIntent（setIntent+通知点击处理+EXTRA_HOT_START→离场中 relaunchGuideForHotStart/否则 epoch++ 收起广告重走）；冷/热广告流程加 epoch 代数守卫；doExit 落页分支（isUninstallEntry→UninstallRetentionActivity；intent.data→ACTION_VIEW 系统浏览器；isHotStart&&!isReturnToMain→finish；否则→MainActivity）；requestNotificationThenProceed 增加 isUninstallEntry 跳过。
+- 新增 ui/uninstall/UninstallEntry.kt（ACTION_DELETE_ENTRY=com.hd.videoplay.media.delete + EXTRA_UNINSTALL_ENTRY 判定）。
+- 验证：:app:assembleDebug + :app:testDebugUnitTest 通过；设备手测待阶段 5 收尾时一并走查。
