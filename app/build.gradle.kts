@@ -93,6 +93,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.process)
 
     implementation("com.android.installreferrer:installreferrer:2.2")
+    implementation("com.flux.tracksdk:tracksdk:3.0.3")
+    implementation("com.adjust.sdk:adjust-android:5.6.1")
 
 
 

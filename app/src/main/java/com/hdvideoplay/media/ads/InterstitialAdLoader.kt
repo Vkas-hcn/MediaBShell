@@ -14,7 +14,7 @@ import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
 
 /**
  * Interstitial (`interstitial_ad`) capability reserved.
- * Default [hd_load_scenes.json] has **no** INT nodes — loader exists so remote JSON can enable later.
+ * Default [hd_config.json] has **no** INT nodes — loader exists so remote JSON can enable later.
  * No rewarded / banner paths.
  *
  * Acceptance: show / waterfall / dismiss only — NEVER auto-click CTAs.

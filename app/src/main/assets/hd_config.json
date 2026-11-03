@@ -1,4 +1,12 @@
 {
+  "hd_ad_config": {
+    "hd_ad_interval": 60,
+    "hd_play_interval": 600,
+    "hd_close_area": 24,
+    "hd_native_close_percent": 10,
+    "hd_node_timeout_sec": 30,
+    "hd_cache_ttl_sec": 14400
+  },
   "hd_load_scenes": [
     {
       "hd_load_scene": "cold_open_a",
@@ -7,13 +15,13 @@
         {
           "hd_platform": "admob",
           "hd_format": "launch_screen",
-          "hd_id": "ca-app-pub-3940256099942544/9257395921",
+          "hd_id": "ca-app-pub-3940256099942544/9257395921x",
           "hd_priority": 1
         },
         {
           "hd_platform": "admob",
           "hd_format": "launch_screen",
-          "hd_id": "ca-app-pub-3940256099942544/9257395921",
+          "hd_id": "ca-app-pub-3940256099942544/9257395921x",
           "hd_priority": 2
         }
       ]
@@ -43,7 +51,7 @@
         {
           "hd_platform": "admob",
           "hd_format": "launch_screen",
-          "hd_id": "ca-app-pub-3940256099942544/9257395921",
+          "hd_id": "ca-app-pub-3940256099942544/9257395921x",
           "hd_priority": 4
         }
       ]
@@ -55,7 +63,7 @@
         {
           "hd_platform": "admob",
           "hd_format": "launch_screen",
-          "hd_id": "ca-app-pub-3940256099942544/9257395921",
+          "hd_id": "ca-app-pub-3940256099942544/9257395921x",
           "hd_priority": 1
         }
       ]

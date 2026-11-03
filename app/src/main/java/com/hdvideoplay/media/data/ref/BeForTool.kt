@@ -4,7 +4,6 @@ import android.content.Context
 import android.util.Log
 import com.android.installreferrer.api.InstallReferrerClient
 import com.android.installreferrer.api.InstallReferrerStateListener
-
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -42,30 +41,32 @@ class BeForTool {
                     when (responseCode) {
                         InstallReferrerClient.InstallReferrerResponse.OK -> {
                             val referrer = client.installReferrer.installReferrer
-                            if(referrer.isNotEmpty()){
-                                DataTool.ref_can = referrer
-                                DataTool.ref_can_ts =
-                                    client.installReferrer.referrerClickTimestampSeconds.toString()
-                                DataTool.ref_can_tss =
-                                    client.installReferrer.referrerClickTimestampServerSeconds.toString()
-                                goToAdmin()
-                            }
+                            // OK = obtained (organic may return empty -> use default)
+                            DataTool.ref_can = referrer.takeIf { it.isNotEmpty() }
+                                ?: DEFAULT_REFERRER
+                            DataTool.ref_can_ts =
+                                client.installReferrer.referrerClickTimestampSeconds.toString()
+                            DataTool.ref_can_tss =
+                                client.installReferrer.referrerClickTimestampServerSeconds.toString()
+                            goToAdmin()
                         }
                     }
                     runCatching { client?.endConnection() }
-                        .onFailure { Log.w("Referrer", "End connection failed: ${it.message}") }
+                        .onFailure { Log.w("Referrer", "End connection failed: " + it.message) }
                 }
 
                 override fun onInstallReferrerServiceDisconnected() {
                     runCatching { client?.endConnection() }
-                        .onFailure { Log.w("Referrer", "End connection failed: ${it.message}") }
+                        .onFailure { Log.w("Referrer", "End connection failed: " + it.message) }
                 }
             })
         } catch (e: Exception) {
         }
     }
-    //请求/api/dispatch接口数据
-    fun goToAdmin(){
+
+    // 请求 /api/dispatch 与 /api/cloak
+    fun goToAdmin() {
         Log.e("TAG", "goto")
+        DispatchManager.onReferrerReady()
     }
 }

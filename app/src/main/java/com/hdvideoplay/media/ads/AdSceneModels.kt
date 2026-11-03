@@ -3,8 +3,13 @@ package com.hdvideoplay.media.ads
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
+/**
+ * Merged config root shared by the bundled default asset and the api/dispatch
+ * remote payload: hd_ad_config + hd_load_scenes.
+ */
 @Serializable
-data class HdLoadScenesRoot(
+data class HdDispatchConfig(
+    @SerialName("hd_ad_config") val adConfig: HdAdConfig? = null,
     @SerialName("hd_load_scenes") val scenes: List<HdLoadScene> = emptyList(),
 )
 
@@ -32,7 +37,7 @@ data class HdAdNode(
 data class HdAdConfig(
     @SerialName("hd_ad_interval") val adIntervalSec: Int = 60,
     @SerialName("hd_play_interval") val playIntervalSec: Int = 600,
-    /** Close hot-zone in dp. Missing/&lt;24 → 24 at runtime. */
+    /** Close hot-zone in dp. Missing/<24 → 24 at runtime. */
     @SerialName("hd_close_area") val closeAreaDp: Int = 24,
     /** Present in competitor default JSON; not the runtime close truth. */
     @SerialName("hd_native_close_percent") val nativeClosePercent: Int = 10,
