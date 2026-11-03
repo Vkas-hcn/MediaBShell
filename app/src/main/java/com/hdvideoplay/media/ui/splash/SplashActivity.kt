@@ -5,12 +5,8 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.Manifest
-import android.content.pm.PackageManager
-import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.addCallback
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.Lifecycle
@@ -19,6 +15,7 @@ import com.hdvideoplay.media.MainActivity
 import com.hdvideoplay.media.ads.AdGate
 import com.hdvideoplay.media.ads.AdLocation
 import com.hdvideoplay.media.ads.AdScheduler
+import com.hdvideoplay.media.permission.NotificationPermissionHelper
 import com.hdvideoplay.media.ui.theme.MediaTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -35,12 +32,10 @@ import kotlinx.coroutines.launch
  */
 class SplashActivity : ComponentActivity() {
 
-    private val notificationPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            getSharedPreferences(PERMISSION_PREFS, MODE_PRIVATE)
-                .edit().putBoolean(KEY_SPLASH_ASKED, true).apply()
-            android.util.Log.i("NotificationPermission", "splash permission result granted=$granted")
-        }
+    private var notifRequested = false
+
+    /** 通知权限状态机；必须在 onCreate 里取一次，保证 launcher 注册早于 STARTED。 */
+    private val permissionHost by lazy { NotificationPermissionHelper.bind(this) }
 
     private val isHotStart: Boolean
         get() = intent.getBooleanExtra(EXTRA_HOT_START, false)
@@ -89,7 +84,8 @@ class SplashActivity : ComponentActivity() {
                 )
             }
         }
-        requestStartupNotificationPermission()
+        // 启动页通知权限：只弹系统框（systemOnly），同意/拒绝/返回键都不阻塞广告流程
+        requestNotificationThenProceed()
     }
 
     override fun onResume() {
@@ -119,17 +115,12 @@ class SplashActivity : ComponentActivity() {
         startFlow()
     }
 
-    private fun requestStartupNotificationPermission() {
-        if (isHotStart || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
-        if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
-        val prefs = getSharedPreferences(PERMISSION_PREFS, MODE_PRIVATE)
-        if (prefs.getBoolean(KEY_SPLASH_ASKED, false)) return
-        prefs.edit().putBoolean(KEY_SPLASH_ASKED, true).apply()
-        window.decorView.post {
-            if (!isFinishing && !isDestroyed) {
-                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            }
-        }
+    /** 通知权限 → 继续启动流程（systemOnly：只弹系统框，弹不出来也不降级，不阻塞广告）。 */
+    private fun requestNotificationThenProceed() {
+        if (notifRequested) return
+        if (NotificationPermissionHelper.isNotificationGranted(this)) return
+        notifRequested = true
+        permissionHost.requestNotification(systemOnly = true) { }
     }
 
     private fun startFlow() {
@@ -235,8 +226,6 @@ class SplashActivity : ComponentActivity() {
         private const val POLL_MS = 100L
         private const val WATCHDOG_MS = 8_000L
         private const val WATCHDOG_POLL_MS = 500L
-        private const val PERMISSION_PREFS = "notification_permission_state"
-        private const val KEY_SPLASH_ASKED = "splash_asked"
 
         /** Set for the lifetime of the visible splash; HotStartManager reads it. */
         @Volatile

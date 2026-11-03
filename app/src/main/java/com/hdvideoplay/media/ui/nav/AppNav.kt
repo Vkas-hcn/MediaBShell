@@ -47,6 +47,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.hdvideoplay.media.MainActivity
 import com.hdvideoplay.media.R
 import com.hdvideoplay.media.ads.AdScenes
 import com.hdvideoplay.media.ads.AdScheduler
@@ -257,6 +258,10 @@ fun AppNav() {
                                         }
                                         launchSingleTop = true
                                         restoreState = true
+                                    }
+                                    // 每次回到首页都重新判定一次通知权限（系统框能弹就弹系统框）
+                                    if (tab.route == Routes.HOME) {
+                                        (context as? MainActivity)?.onHomeTabSelected()
                                     }
                                 },
                                 icon = {

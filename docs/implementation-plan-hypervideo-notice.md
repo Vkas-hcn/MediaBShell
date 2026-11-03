@@ -58,3 +58,12 @@
 - HotStartManager：最小增量 processInForeground+isAppForeground()（阶段 4 重写时保留该 API）。
 - 测试：移植 NewsGateRulesTest、BannerNotificationSessionManagerTest、FcmNotificationGateTest（替换旧版 NewsGateRulesTest 断言）；新增 NoticeConfigTest（解析/默认/回退/isHourAllowed）。
 - 验证：:app:assembleDebug + :app:testDebugUnitTest 通过。
+### 阶段 3（2026-11-03，完成）
+
+- 新建 permission 包：NotificationPermissionHelper（object+Host、registerForActivityResult 双 launcher、300ms SYSTEM_DIALOG_VISIBLE_MIN_MS 判定、requestNotification(systemOnly)、showNotificationInAppPrompt、skipNextHomeNotificationPrompt、纯函数三件套；Allow→先摘 dismiss 监听→HotStartManager.ignoreNextBackgroundReturn(notification_permission_settings)→设置页→返回回调 hasNotificationPermission）、NotificationPermissionDialog（AppActionDialogTheme、setLayout 屏宽−2×16dp、可取消、OnDismissListener 统一按拒绝）。
+- 删除 MainActivity/SplashActivity 自写的 denials 计数、AlertDialog、homePermissionRequested、splash_asked 逻辑。
+- MainActivity：permissionHost 惰性绑定（onCreate 早于 STARTED）；onResume→scheduleHomeNotificationPrompt（300ms 防抖）、onPause 移除；showHomeNotificationPrompt（仅 RESUMED 未销毁→showNotificationInAppPrompt{ granted→HintUtil.markLing() }）；新增 onHomeTabSelected()。
+- AppNav：HOME Tab 点击回调 onHomeTabSelected()（每次切回首页重新判定）。
+- SplashActivity：notifRequested 实例标志 + permissionHost.requestNotification(systemOnly=true)（同意/拒绝/返回键均不阻塞广告流程）。
+- HotStartManager：最小增量 ignoreNextBackgroundReturn(reason)（onStop 清标记并跳过热启动武装；阶段 4 重写时保留该 API）。
+- 测试：移植 NotificationPermissionRulesTest；验证 :app:assembleDebug + :app:testDebugUnitTest 通过。

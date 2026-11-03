@@ -34,6 +34,7 @@ object HotStartManager : DefaultLifecycleObserver {
     private var armed = false
     private var launching = false
     private var pendingArm: Runnable? = null
+    private var ignoreNextBackgroundReturn = false
 
     /** 进程前台状态（通知门禁等使用；阶段4 重写时保留该 API）。 */
     @Volatile
@@ -104,6 +105,12 @@ object HotStartManager : DefaultLifecycleObserver {
     override fun onStop(owner: LifecycleOwner) {
         processInForeground = false
         if (!hasSeenForeground) return
+        // 去系统设置页等系统界面不算真正离开后台，跳过一次热启动判定
+        if (ignoreNextBackgroundReturn) {
+            ignoreNextBackgroundReturn = false
+            Log.d(TAG, "启动广告判定=跳过热启动 原因=主动跳系统页")
+            return
+        }
         cancelPendingArm()
         // Load while we are backgrounded so the next foreground can show directly.
         AdScheduler.forcePreloadHot()
@@ -120,6 +127,15 @@ object HotStartManager : DefaultLifecycleObserver {
     private fun cancelPendingArm() {
         pendingArm?.let(handler::removeCallbacks)
         pendingArm = null
+    }
+
+    /**
+     * 告诉「热启动判定」下一次退后台不是用户真的离开（例如去系统设置页开通知权限），
+     * 避免用户从设置返回时被当成回前台而重走开屏。
+     */
+    fun ignoreNextBackgroundReturn(reason: String) {
+        ignoreNextBackgroundReturn = true
+        Log.d(TAG, "启动广告判定=忽略本次退后台 原因=" + reason)
     }
 
     private fun launchSplash(activity: Activity?) {
