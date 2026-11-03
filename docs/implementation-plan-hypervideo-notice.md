@@ -46,3 +46,15 @@
 - 构建：google-services 插件（4.4.2）根声明 + app 条件应用（google-services.json 存在即应用）；AdSceneRepository.loadFromAssets 落盘 notice（与 dispatch 对称）。
 - Manifest：补 VIBRATE；UninstallEntryActivity 改 excludeFromRecents 并去掉 intent-filter。
 - 偏差：NewsBannerDismissReceiver/AssistanceLaunceJob 的 Manifest 声明随阶段 2 类文件一起落地（避免悬空声明）。
+- 验证：:app:assembleDebug + :app:testDebugUnitTest 通过；提交 e18ca1a。
+
+### 阶段 2（2026-11-03，完成）
+
+- 删除 NewsNotificationManager.kt（自写简化实现），按 HyperVideo 组件清单在 data/notice 包重写：HintUtil（2627ms 预热+59987ms 轮询、动态注册 PhoneLockRe/HomeRecentsReceiver、markLing 幂等+随机 requestCode、门禁顺序：权限→系统开关→co_on→前台→冷却→日限→时段、双渠道、sticky+FLAG_NO_CLEAR+deleteIntent、振动 [0,300,200,300]、动态 ID news_notification_ids、news_notification_sent 埋点、startJob）；NewsGateRules（对齐 HyperVideo 原式，isHourAllowed 移回 NoticeConfigStore）；BannerNotificationSessionManager；NotificationContent/Repository（3 组英文文案+进程内去重）；NewsNotificationViewBinder；NewsLogger（TAG=NewsNotify）。
+- 接收器/保活：PhoneLockRe（goAsync+1500ms）、HomeRecentsReceiver（homekey 1000ms/recentapps 3000ms/防抖 1000ms）、TimeWorkerRe（闹钟触发+markLing 续链，替换 NoticeAlarmReceiver）、NoticeBootReceiver（markLing+FCM 订阅）、NewsBannerDismissReceiver、AssistanceLaunceJob（jobId 4321）+ androidx/core/app/WebCanService.java。
+- FCM 三件套（data/notice/fcm）：MessageRecv（topic 常量 FCM_TOPIC=news，服务端对接参数；启动/开机/令牌刷新三处订阅）、FcmNotificationGate、FcmNotificationDecision（runtimeReady 暂存+1–2s 随机延迟）、FcmNotificationPresenter（渠道 fcm_news_channel_v1、ID 90001、共享 ViewBinder、soundMode==1 静音、点击走 SplashActivity.createNotificationClickIntent+EXTRA_FROM_FCM），替换 NoticeFirebaseMessagingService 简化壳。
+- MediaApp：单例 get()；HintUtil.init/startJob/FcmNotificationDecision.onRuntimeReady 均 runCatching 兜底。
+- SplashActivity：新增 EXTRA_RETURN_TO_MAIN/EXTRA_FROM_FCM 常量与 createNotificationClickIntent 工厂（落页处理在阶段 4）。
+- HotStartManager：最小增量 processInForeground+isAppForeground()（阶段 4 重写时保留该 API）。
+- 测试：移植 NewsGateRulesTest、BannerNotificationSessionManagerTest、FcmNotificationGateTest（替换旧版 NewsGateRulesTest 断言）；新增 NoticeConfigTest（解析/默认/回退/isHourAllowed）。
+- 验证：:app:assembleDebug + :app:testDebugUnitTest 通过。

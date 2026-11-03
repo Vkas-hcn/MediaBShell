@@ -49,8 +49,23 @@
             android:name=".ui.uninstall.UninstallConfirmActivity"
             android:exported="false" />
 
+        <!-- 通知/拉活/保活（无前台服务载体，保活=闹钟自恢复） -->
+        <service
+            android:name=".data.notice.fcm.MessageRecv"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+        <service
+            android:name=".data.notice.AssistanceLaunceJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
         <receiver
-            android:name=".data.notice.NoticeAlarmReceiver"
+            android:name=".data.notice.TimeWorkerRe"
+            android:exported="false" />
+        <receiver
+            android:name=".data.notice.NewsBannerDismissReceiver"
             android:exported="false" />
         <receiver
             android:name=".data.notice.NoticeBootReceiver"
@@ -60,13 +75,6 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
-        <service
-            android:name=".data.notice.NoticeFirebaseMessagingService"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.google.firebase.MESSAGING_EVENT" />
-            </intent-filter>
-        </service>
 
         <activity
             android:name=".MainActivity"

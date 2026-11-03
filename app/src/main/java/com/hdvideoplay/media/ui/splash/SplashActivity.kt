@@ -225,6 +225,8 @@ class SplashActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_HOT_START = "extra_hot_start"
+        const val EXTRA_RETURN_TO_MAIN = "extra_return_to_main"
+        const val EXTRA_FROM_FCM = "extra_from_fcm"
 
         private const val COLD_HOLD_MS = 1400L
         private const val HOT_HOLD_MS = 1_400L
@@ -245,5 +247,18 @@ class SplashActivity : ComponentActivity() {
             Intent(context, SplashActivity::class.java)
                 .putExtra(EXTRA_HOT_START, true)
                 .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+
+        /**
+         * 通知点击入口：清栈重走启动页广告流程（NEW_TASK|CLEAR_TOP|SINGLE_TOP 语义），
+         * 带 EXTRA_RETURN_TO_MAIN 保证广告结束后落主页。
+         */
+        fun createNotificationClickIntent(context: Context): Intent =
+            Intent(context, SplashActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra(EXTRA_HOT_START, true)
+                putExtra(EXTRA_RETURN_TO_MAIN, true)
+            }
     }
 }

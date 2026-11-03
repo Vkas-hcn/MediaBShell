@@ -35,6 +35,12 @@ object HotStartManager : DefaultLifecycleObserver {
     private var launching = false
     private var pendingArm: Runnable? = null
 
+    /** 进程前台状态（通知门禁等使用；阶段4 重写时保留该 API）。 */
+    @Volatile
+    private var processInForeground = true
+
+    fun isAppForeground(): Boolean = processInForeground
+
     fun init(application: Application) {
         if (initialized) return
         initialized = true
@@ -44,6 +50,7 @@ object HotStartManager : DefaultLifecycleObserver {
     }
 
     override fun onStart(owner: LifecycleOwner) {
+        processInForeground = true
         cancelPendingArm()
         if (!hasSeenForeground) {
             // Cold launch: SplashActivity is already the launcher.
@@ -95,6 +102,7 @@ object HotStartManager : DefaultLifecycleObserver {
     }
 
     override fun onStop(owner: LifecycleOwner) {
+        processInForeground = false
         if (!hasSeenForeground) return
         cancelPendingArm()
         // Load while we are backgrounded so the next foreground can show directly.

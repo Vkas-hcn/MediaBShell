@@ -35,6 +35,11 @@ object NoticeConfigStore {
     private const val KEY_RAW = "raw"
     @Volatile private var appContext: android.content.Context? = null
 
+    private val json = kotlinx.serialization.json.Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+    }
+
     fun init(context: android.content.Context) {
         appContext = context.applicationContext
     }
@@ -44,8 +49,7 @@ object NoticeConfigStore {
         val raw = context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
             .getString(KEY_RAW, null) ?: return NoticeConfig()
         return runCatching {
-            kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
-                .decodeFromString(NoticeConfig.serializer(), raw)
+            json.decodeFromString(NoticeConfig.serializer(), raw)
         }.getOrDefault(NoticeConfig())
     }
 
@@ -57,5 +61,23 @@ object NoticeConfigStore {
                 kotlinx.serialization.json.Json.encodeToString(NoticeConfig.serializer(), config),
             )
             ?.apply()
+    }
+
+    fun getLong(key: String, defaultValue: Long = 0L): Long {
+        val context = appContext ?: return defaultValue
+        return context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+            .getLong(key, defaultValue)
+    }
+
+    fun putLong(key: String, value: Long) {
+        appContext?.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+            ?.edit()?.putLong(key, value)?.apply()
+    }
+
+    /** 允许时段判定：from=min(start,end)，to=max(start,end)，允许 hour in from..to。 */
+    internal fun isHourAllowed(hour: Int, start: Int, end: Int): Boolean {
+        val from = minOf(start, end)
+        val to = maxOf(start, end)
+        return hour in from..to
     }
 }
