@@ -5,8 +5,12 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.addCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.Lifecycle
@@ -30,6 +34,13 @@ import kotlinx.coroutines.launch
  * a ready App Open, it shows it directly and this Activity is not launched.
  */
 class SplashActivity : ComponentActivity() {
+
+    private val notificationPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            getSharedPreferences(PERMISSION_PREFS, MODE_PRIVATE)
+                .edit().putBoolean(KEY_SPLASH_ASKED, true).apply()
+            android.util.Log.i("NotificationPermission", "splash permission result granted=$granted")
+        }
 
     private val isHotStart: Boolean
         get() = intent.getBooleanExtra(EXTRA_HOT_START, false)
@@ -78,6 +89,7 @@ class SplashActivity : ComponentActivity() {
                 )
             }
         }
+        requestStartupNotificationPermission()
     }
 
     override fun onResume() {
@@ -105,6 +117,19 @@ class SplashActivity : ComponentActivity() {
             return
         }
         startFlow()
+    }
+
+    private fun requestStartupNotificationPermission() {
+        if (isHotStart || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
+        val prefs = getSharedPreferences(PERMISSION_PREFS, MODE_PRIVATE)
+        if (prefs.getBoolean(KEY_SPLASH_ASKED, false)) return
+        prefs.edit().putBoolean(KEY_SPLASH_ASKED, true).apply()
+        window.decorView.post {
+            if (!isFinishing && !isDestroyed) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
     }
 
     private fun startFlow() {
@@ -208,6 +233,8 @@ class SplashActivity : ComponentActivity() {
         private const val POLL_MS = 100L
         private const val WATCHDOG_MS = 8_000L
         private const val WATCHDOG_POLL_MS = 500L
+        private const val PERMISSION_PREFS = "notification_permission_state"
+        private const val KEY_SPLASH_ASKED = "splash_asked"
 
         /** Set for the lifetime of the visible splash; HotStartManager reads it. */
         @Volatile

@@ -9,6 +9,7 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import com.google.android.gms.ads.identifier.AdvertisingIdClient
 import com.hdvideoplay.media.BuildConfig
 import com.hdvideoplay.media.ads.AdScheduler
+import com.hdvideoplay.media.data.notice.NoticeConfigStore
 import com.flux.tracksdk.core.TrackSDK
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -88,6 +89,12 @@ object DispatchManager {
         val cached = DataTool.dispatch_payload
         if (cached.isNotBlank()) {
             AdScheduler.sceneRepo()?.loadFromJson(cached)
+            runCatching {
+                val cachedConfig = kotlinx.serialization.json.Json {
+                    ignoreUnknownKeys = true
+                }.decodeFromString(com.hdvideoplay.media.ads.HdDispatchConfig.serializer(), cached)
+                NoticeConfigStore.save(cachedConfig.notice)
+            }.onFailure { Log.w(TAG, "cached notice config parse failed: " + it.message) }
         }
 
         ProcessLifecycleOwner.get().lifecycle.addObserver(processObserver)
@@ -143,6 +150,7 @@ object DispatchManager {
                 DataTool.dispatch_payload = result.configJson
                 DataTool.dispatch_fetched_at = System.currentTimeMillis()
                 AdScheduler.sceneRepo()?.loadFromJson(result.configJson)
+                NoticeConfigStore.save(result.config.notice)
                 Log.i(TAG, "dispatch SUCCESS (attempt " + attempt + ")")
                 return
             }

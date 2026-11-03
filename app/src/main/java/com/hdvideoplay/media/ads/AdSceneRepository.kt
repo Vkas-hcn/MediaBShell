@@ -2,6 +2,7 @@ package com.hdvideoplay.media.ads
 
 import android.content.Context
 import android.util.Log
+import com.hdvideoplay.media.data.notice.NoticeConfigStore
 import kotlinx.serialization.json.Json
 
 /**
@@ -31,7 +32,13 @@ class AdSceneRepository(private val context: Context) {
             Log.e(TAG, "Failed to open $CONFIG_ASSET")
             return
         }
-        if (!loadFromJson(raw)) {
+        if (loadFromJson(raw)) {
+            // 资产配置同样落盘 notice（与 api/dispatch 路径对称）
+            runCatching {
+                val dto = json.decodeFromString(HdDispatchConfig.serializer(), raw)
+                NoticeConfigStore.save(dto.notice)
+            }.onFailure { Log.e(TAG, "Failed to apply notice config", it) }
+        } else {
             Log.e(TAG, "Failed to parse $CONFIG_ASSET")
         }
     }

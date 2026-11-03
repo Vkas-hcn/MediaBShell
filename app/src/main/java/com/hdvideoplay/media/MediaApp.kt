@@ -16,6 +16,8 @@ import com.hdvideoplay.media.data.local.WatchHistoryRepository
 import com.hdvideoplay.media.data.ref.BeForTool
 import com.hdvideoplay.media.data.ref.DataTool
 import com.hdvideoplay.media.data.ref.DispatchManager
+import com.hdvideoplay.media.data.notice.NoticeConfigStore
+import com.hdvideoplay.media.data.notice.NewsNotificationManager
 import com.hdvideoplay.media.startup.HotStartManager
 import com.hdvideoplay.media.ui.recall.RecallPopupController
 
@@ -27,12 +29,14 @@ class MediaApp : Application() {
         super.onCreate()
         initTrackSdk()
         DataTool.init(this)
+        NoticeConfigStore.init(this)
         WatchHistoryRepository.init(this)
         // Cold-start recall config pull; Home decides from cache afterwards.
         RecallPopupController.init(this)
         // AdMob + scene bus (Load≠Show). Employee1: App Open cold/warm.
         AdScheduler.init(this)
         HotStartManager.init(this)
+        NewsNotificationManager.init(this)
         DispatchManager.init(this)
         beForTool.launchRefData()
         initAdJust(this)

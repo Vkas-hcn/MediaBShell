@@ -2,6 +2,7 @@ package com.hdvideoplay.media.ads
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import com.hdvideoplay.media.data.notice.NoticeConfig
 
 /**
  * Merged config root shared by the bundled default asset and the api/dispatch
@@ -9,6 +10,7 @@ import kotlinx.serialization.Serializable
  */
 @Serializable
 data class HdDispatchConfig(
+    @SerialName("notice") val notice: NoticeConfig = NoticeConfig(),
     @SerialName("hd_ad_config") val adConfig: HdAdConfig? = null,
     @SerialName("hd_load_scenes") val scenes: List<HdLoadScene> = emptyList(),
 )

@@ -9,4 +9,16 @@
     <color name="splash_bg">#FF080808</color>
     <color name="splash_red">#FFE21220</color>
     <color name="splash_track">#FF2A2A2A</color>
+
+    <!-- HyperVideo 复刻（通知/弹框/卸载挽留） -->
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="white_80">#CCFFFFFF</color>
+    <color name="player_text_secondary">#99FFFFFF</color>
+    <color name="app_background">#FF080808</color>
+    <color name="brand_red">#FFE21220</color>
+    <color name="uninstall_card">#FF1A1A1D</color>
+    <color name="uninstall_link">#FFB0B0B3</color>
+    <color name="notification_text_primary">#FF1A1A1D</color>
+    <color name="notification_text_secondary">#CC1A1A1D</color>
 </resources>

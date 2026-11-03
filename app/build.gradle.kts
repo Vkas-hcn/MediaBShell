@@ -5,6 +5,11 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+// Firebase（FCM 通知/拉活）：google-services.json 缺失时不阻塞构建，FCM 链路静默不生效。
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 android {
     namespace = "com.hdvideoplay.media"
     compileSdk = 35
@@ -91,6 +96,8 @@ dependencies {
     implementation(libs.play.services.ads)
     implementation(libs.androidx.constraintlayout)
     implementation(libs.androidx.lifecycle.process)
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
 
     implementation("com.android.installreferrer:installreferrer:2.2")
     implementation("com.flux.tracksdk:tracksdk:3.0.3")
