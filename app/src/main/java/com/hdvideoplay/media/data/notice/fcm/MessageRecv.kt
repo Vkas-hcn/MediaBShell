@@ -38,7 +38,7 @@ class MessageRecv : FirebaseMessagingService() {
 
     companion object {
         /** 服务端推送主题（对接参数，需与推送端一致）。 */
-        const val FCM_TOPIC = "news"
+        const val FCM_TOPIC = "hypervideo"
 
         fun subscribeTopic(source: String = "启动") {
             runCatching {
