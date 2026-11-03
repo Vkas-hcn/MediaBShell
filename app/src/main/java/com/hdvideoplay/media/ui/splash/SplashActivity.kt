@@ -23,6 +23,7 @@ import com.hdvideoplay.media.ads.AdScheduler
 import com.hdvideoplay.media.data.notice.HintUtil
 import com.hdvideoplay.media.permission.NotificationPermissionHelper
 import com.hdvideoplay.media.startup.HotStartManager
+import com.hdvideoplay.media.ui.detail.DetailActivity
 import com.hdvideoplay.media.ui.theme.MediaTheme
 import com.hdvideoplay.media.ui.uninstall.UninstallEntry
 import com.hdvideoplay.media.ui.uninstall.UninstallRetentionActivity
@@ -333,6 +334,13 @@ class SplashActivity : ComponentActivity() {
             finish()
             return
         }
+        // 通知点击带影视 ID：开屏广告结束后进对应详情页并自动播放
+        val mediaId = intent.getIntExtra(EXTRA_MEDIA_ID, -1)
+        if (mediaId > 0) {
+            startActivity(DetailActivity.createIntent(this, mediaId, autoPlay = true))
+            finish()
+            return
+        }
         // 通知点击带 URL：落地系统浏览器打开该页面；无 URL 默认首页
         val targetUrl = intent.data?.toString().orEmpty()
         if (targetUrl.isNotBlank()) {
@@ -354,6 +362,7 @@ class SplashActivity : ComponentActivity() {
         const val EXTRA_HOT_START = "extra_hot_start"
         const val EXTRA_RETURN_TO_MAIN = "extra_return_to_main"
         const val EXTRA_FROM_FCM = "extra_from_fcm"
+        const val EXTRA_MEDIA_ID = "extra_media_id"
 
         private const val HOT_START_DISMISS_TIMEOUT_MS = 1_500L
         private const val HOT_START_DISMISS_POLL_MS = 50L

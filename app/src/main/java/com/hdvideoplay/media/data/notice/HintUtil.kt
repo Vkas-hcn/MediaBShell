@@ -284,10 +284,13 @@ object HintUtil {
             return
         }
         val notificationId = nextNotificationId()
+        // 影视封面：下载失败/超时返回 null，通知图回退固定图标
+        val poster = PosterFetcher.load(content)
         if (bannerConfig.enabled == 1 && bannerConfig.durationSeconds > 0 && !isDeviceLocked()) {
             sendPersistentNotification(
                 content, showType, notificationId,
                 bannerConfig.durationSeconds, bannerConfig.ringEnabled == 1,
+                poster,
             )
         } else {
             if (bannerConfig.enabled == 1 && bannerConfig.durationSeconds > 0) {
@@ -295,7 +298,7 @@ object HintUtil {
             } else {
                 NewsLogger.bannerSkipped("banner_disabled")
             }
-            sendStandardNotification(content, showType, notificationId, sticky = true)
+            sendStandardNotification(content, showType, notificationId, poster = poster, sticky = true)
             recordSent(showType)
         }
     }
@@ -306,6 +309,7 @@ object HintUtil {
         notificationId: Int,
         durationSeconds: Int,
         ringEnabled: Boolean,
+        poster: NotificationPoster?,
     ) {
         val session = bannerSessions.tryStart(content, durationSeconds, notificationId) ?: run {
             NewsLogger.bannerSkipped("session_lost")
@@ -329,6 +333,7 @@ object HintUtil {
                     alert = alert,
                     sticky = true,
                     trackSent = firstNotification,
+                    poster = poster,
                 )
                 if (firstNotification) {
                     recordSent(showType)
@@ -368,8 +373,9 @@ object HintUtil {
         alert: AlertProfile = firstShowAlert,
         sticky: Boolean = false,
         trackSent: Boolean = true,
+        poster: NotificationPoster? = null,
     ) {
-        val notification = createOnceNt(content, showType, notificationId, alert, sticky)
+        val notification = createOnceNt(content, showType, notificationId, alert, sticky, poster)
         getManager().notify(notificationId, notification)
         val channelId = if (alert.silent) NEWS_SILENT_CHANNEL_ID else NEWS_CHANNEL_ID
         NewsLogger.notifySubmitted(showType, notificationId, channelId, sticky)
@@ -384,6 +390,7 @@ object HintUtil {
         notificationId: Int,
         alert: AlertProfile,
         sticky: Boolean,
+        poster: NotificationPoster?,
     ): Notification {
         val channelId = if (alert.silent) NEWS_SILENT_CHANNEL_ID else NEWS_CHANNEL_ID
         createChannel(
@@ -392,7 +399,7 @@ object HintUtil {
             NotificationManagerCompat.IMPORTANCE_HIGH,
             silent = alert.silent,
         )
-        val contentIntent = createIntent(content.url, showType, notificationId)
+        val contentIntent = createIntent(content, showType, notificationId)
         return NotificationCompat.Builder(coIntance(), channelId)
             .setSmallIcon(R.drawable.ic_notification_small)
             .setColor(ContextCompat.getColor(coIntance(), R.color.brand_red))
@@ -411,9 +418,9 @@ object HintUtil {
                 }
             }
             .setShowWhen(false)
-            .setCustomContentView(createCollapsedNewsView(content, contentIntent))
-            .setCustomBigContentView(createLargeNewsView(content, contentIntent))
-            .setCustomHeadsUpContentView(createCollapsedNewsView(content, contentIntent))
+            .setCustomContentView(createCollapsedNewsView(content, contentIntent, poster?.small))
+            .setCustomBigContentView(createLargeNewsView(content, contentIntent, poster?.large))
+            .setCustomHeadsUpContentView(createCollapsedNewsView(content, contentIntent, poster?.small))
             .build()
             .apply {
                 // 置顶（常驻、划不掉）：Android 14 起 FLAG_ONGOING_EVENT 已经挡不住用户划掉，
@@ -454,19 +461,29 @@ object HintUtil {
     private fun createCollapsedNewsView(
         content: NotificationContent,
         contentIntent: PendingIntent,
-    ): RemoteViews = NewsNotificationViewBinder.collapsed(coIntance(), content, contentIntent)
+        poster: android.graphics.Bitmap? = null,
+    ): RemoteViews = NewsNotificationViewBinder.collapsed(coIntance(), content, contentIntent, poster)
 
     private fun createLargeNewsView(
         content: NotificationContent,
         contentIntent: PendingIntent,
-    ): RemoteViews = NewsNotificationViewBinder.expanded(coIntance(), content, contentIntent)
+        poster: android.graphics.Bitmap? = null,
+    ): RemoteViews = NewsNotificationViewBinder.expanded(coIntance(), content, contentIntent, poster)
 
-    /** 点击统一走启动页热启动（清栈 + 回主页），URL 非空时落地系统浏览器打开该页面。 */
-    private fun createIntent(url: String, showType: Int, notificationId: Int): PendingIntent {
+    /**
+     * 点击统一走启动页热启动（清栈），落地规则：
+     * - 影视内容（mediaId>0）→ 启动页开屏广告后进对应详情页并自动播放；
+     * - URL 非空 → 系统浏览器打开该页面；
+     * - 其余 → 首页。
+     */
+    private fun createIntent(content: NotificationContent, showType: Int, notificationId: Int): PendingIntent {
         val intent = SplashActivity.createNotificationClickIntent(coIntance()).apply {
-            if (url.isNotBlank()) {
+            if (content.mediaId > 0) {
+                putExtra(SplashActivity.EXTRA_MEDIA_ID, content.mediaId)
+            }
+            if (content.url.isNotBlank()) {
                 action = Intent.ACTION_VIEW
-                data = android.net.Uri.parse(url)
+                data = android.net.Uri.parse(content.url)
             }
             putExtra(CO_SHOW_TYPE, showType)
             putExtra(CO_NOTIFICATION_ID, notificationId)

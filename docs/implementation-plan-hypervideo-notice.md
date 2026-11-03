@@ -103,3 +103,12 @@
 - 权限：启动页系统框、首页连续两次拒绝后自定义框、Allow→设置页→返回 markLing。
 - 卸载挽留：长按图标→Uninstall→启动页→开屏→挽留页→确认页→设置页全链路（含两处 RETURN_AD 插屏）。
 - FCM：需推送端按 topic=news 发送 data-only 消息后验证 1–2s 延迟展示与点击落首页。
+## 扩展：通知封面影视化（2026-11-03，已与需求方确认口径）
+
+需求：通知样式中的固定图片改为随机拉取应用内影视资源的封面；点击通知先走启动页展示开屏广告，然后进入对应封面 id 的视频详情页并播放。
+
+已确认口径：数据源=首页 home_data（模块展平）；拉取失败回退现有固定图标+静态文案；文案=标题用影片标题、摘要用简介、按钮 Play now；点击→启动页→开屏广告→DetailActivity(mediaId, autoPlay=true)；拉取策略=缓存 5 条池子 1 小时 TTL、进程内随机轮换去重。
+
+- 数据层（提交 9507fe0）：NotificationContent 增加 mediaId/posterUrl；NotificationContentRepository 增加动态池（home_data 展平→过滤有 mediaId/标题/封面的条目→随机 5 条缓存 1h→每次随机且避免连续重复），失败回退静态池；PosterFetcher（OkHttp 下载、128px 小图/360px 大图双解码、按 URL 进程内缓存≤8 条、5s 超时失败回退固定图标）；NotificationContentRepositoryTest（fake MediaApi：字段映射/单条去重/TTL 复用与过期重拉/失败回退）。
+- 构建与落页（本提交）：NewsNotificationViewBinder 增加 poster 参数（封面优先、固定图标兜底）；HintUtil 发送链路透传封面（普通与 banner 会话两条路径）；通知点击 intent 携带 EXTRA_MEDIA_ID；SplashActivity.doExit 增加 mediaId 分支→DetailActivity.createIntent(autoPlay=true)。FCM 通知样式与点击行为不变。
+- 验证：:app:assembleDebug + :app:testDebugUnitTest 通过。设备待办：真机验证封面显示与点击→开屏→详情页自动播放链路。
