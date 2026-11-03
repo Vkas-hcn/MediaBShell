@@ -32,8 +32,12 @@ val SurfaceElevated = Color(0xFF12151C)
 val ChipBg = Color(0xFF1A1F2A)
 val ChipBorder = Color(0xFF3A4254)
 val PressSurface = Color(0xFF1A1F2A)
-/** Splash progress track: #7C8CAE @ 32% opacity. */
-val SplashProgressTrack = Color(0x527C8CAE)
+/** Splash background (HyperVideo app_background). */
+val SplashBg = Color(0xFF080808)
+/** Splash progress fill (HyperVideo brand_red). */
+val SplashProgressRed = Color(0xFFE21220)
+/** Splash progress track (HyperVideo #2A2A2A). */
+val SplashProgressTrack = Color(0xFF2A2A2A)
 
 
 private val VideoPlayDarkColors = darkColorScheme(

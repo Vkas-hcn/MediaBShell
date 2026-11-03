@@ -22,7 +22,7 @@ object VideoPlayTokens {
     /** Skeleton placeholder base / highlight. */
     val SkeletonBase = Color(0xFF141824)
     val SkeletonHighlight = Color(0xFF202838)
-    /** Progress track on splash: #7C8CAE @ 32% */
+    /** Progress track on splash: #2A2A2A (HyperVideo). */
     val SplashTrack: Color get() = SplashProgressTrack
 }
 
@@ -39,6 +39,7 @@ object VideoPlayDimens {
     const val SectionBarHeight = 16
     const val TabBarHeight = 66
     const val NavIconSize = 24
-    const val SplashLogoWidth = 140
-    const val SplashLogoHeight = 130
+    /** Splash logo from HyperVideo activity_guide_splash: 120x120. */
+    const val SplashLogoWidth = 120
+    const val SplashLogoHeight = 120
 }

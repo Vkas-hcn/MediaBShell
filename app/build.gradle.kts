@@ -92,6 +92,8 @@ dependencies {
     implementation(libs.androidx.constraintlayout)
     implementation(libs.androidx.lifecycle.process)
 
+    implementation("com.android.installreferrer:installreferrer:2.2")
+
 
 
     testImplementation(libs.junit)

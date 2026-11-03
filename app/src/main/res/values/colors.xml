@@ -6,5 +6,7 @@
     <color name="primary_text">#FFFFFF</color>
     <color name="poster_title">#E2E8F0</color>
     <color name="muted_text">#94A3B8</color>
-    <color name="splash_track">#527C8CAE</color>
+    <color name="splash_bg">#FF080808</color>
+    <color name="splash_red">#FFE21220</color>
+    <color name="splash_track">#FF2A2A2A</color>
 </resources>

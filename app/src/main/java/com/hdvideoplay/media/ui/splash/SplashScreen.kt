@@ -6,17 +6,15 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -28,31 +26,30 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.hdvideoplay.media.R
-import com.hdvideoplay.media.ui.theme.BrandGold
-import com.hdvideoplay.media.ui.theme.PageBg
-import com.hdvideoplay.media.ui.theme.PrimaryText
+import com.hdvideoplay.media.ui.theme.SplashBg
+import com.hdvideoplay.media.ui.theme.SplashProgressRed
 import com.hdvideoplay.media.ui.theme.SplashProgressTrack
 import com.hdvideoplay.media.ui.theme.VideoPlayDimens
-import com.hdvideoplay.media.ui.theme.VideoPlayFontFamily
 import kotlinx.coroutines.delay
 
 /**
- * Cold-start Loading aligned to Lanhu splash artboard (360x800):
- * - background at 0,0 360x800
- * - logo 140x130 at (110,172), wordmark 24sp/28 at (120,314)
- * - progress track 260x6 at (50,743), pill radius, #FFB800 / #7C8CAE 32%.
+ * Cold-start splash aligned to HyperVideo GuideActivity splash
+ * (activity_guide_splash.xml):
+ * - full-screen background #080808
+ * - logo ic_login 120x120, centered and raised 50dp
+ *   (center gravity + 100dp bottom margin)
+ * - horizontal progress bar 6dp pinned to the bottom: 24dp side margins,
+ *   100dp above the bottom edge, track #2A2A2A, fill #E21220,
+ *   animated 0 -> 100% over the hold time.
  */
 @Composable
 fun SplashLoadingScreen(
     onFinished: () -> Unit,
     holdMs: Long = 1400L,
 ) {
-    var target by remember { mutableFloatStateOf(0.08f) }
+    var target by remember { mutableFloatStateOf(0f) }
     val progress by animateFloatAsState(
         targetValue = target,
         animationSpec = tween(
@@ -80,60 +77,37 @@ fun SplashBackdrop(progress: Float) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(PageBg),
+            .background(SplashBg),
     ) {
-        // Lanhu 1440x3200 (4x 360x800) full-bleed film-strip / glow art.
+        // HyperVideo: logo centered with a 100dp bottom margin
+        // (i.e. raised 50dp above the true center).
         Image(
-            painter = painterResource(R.drawable.img_splash_bg),
+            painter = painterResource(R.drawable.ic_login),
             contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop,
-        )
-
-        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .align(Alignment.TopCenter)
-                .padding(top = 172.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Image(
-                painter = painterResource(R.drawable.img_video_play_logo),
-                contentDescription = null,
-                modifier = Modifier.size(
+                .align(Alignment.Center)
+                .offset(y = (-50).dp)
+                .size(
                     width = VideoPlayDimens.SplashLogoWidth.dp,
                     height = VideoPlayDimens.SplashLogoHeight.dp,
                 ),
-                contentScale = ContentScale.Fit,
-            )
-            Spacer(Modifier.height(12.dp))
-            Text(
-                text = stringResource(R.string.brand_wordmark),
-                color = PrimaryText,
-                fontSize = 24.sp,
-                lineHeight = 28.sp,
-                fontWeight = FontWeight.Medium,
-                fontFamily = VideoPlayFontFamily,
-            )
-        }
+            contentScale = ContentScale.Fit,
+        )
 
-        Column(
+        // HyperVideo: 6dp horizontal bar, 24dp side margins,
+        // 100dp above the bottom edge.
+        LinearProgressIndicator(
+            progress = { progress.coerceIn(0f, 1f) },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .padding(horizontal = 50.dp, vertical = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            LinearProgressIndicator(
-                progress = { progress.coerceIn(0f, 1f) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(6.dp)
-                    .clip(RoundedCornerShape(3.dp)),
-                color = BrandGold,
-                trackColor = SplashProgressTrack,
-            )
-        }
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 100.dp)
+                .height(6.dp)
+                .clip(RoundedCornerShape(3.dp)),
+            color = SplashProgressRed,
+            trackColor = SplashProgressTrack,
+        )
     }
 }
