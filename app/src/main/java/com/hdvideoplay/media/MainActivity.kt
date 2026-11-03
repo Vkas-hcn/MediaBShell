@@ -11,7 +11,9 @@ import com.hdvideoplay.media.ads.AdScenes
 import com.hdvideoplay.media.ads.AdScheduler
 import com.hdvideoplay.media.data.notice.HintUtil
 import com.hdvideoplay.media.permission.NotificationPermissionHelper
+import com.hdvideoplay.media.track.TrackEvents
 import com.hdvideoplay.media.ui.nav.AppNav
+import com.hdvideoplay.media.ui.splash.SplashActivity
 import com.hdvideoplay.media.ui.recall.RecallPopupController
 import com.hdvideoplay.media.ui.theme.MediaTheme
 
@@ -21,6 +23,10 @@ import com.hdvideoplay.media.ui.theme.MediaTheme
  */
 class MainActivity : ComponentActivity() {
     private val permissionHandler = Handler(Looper.getMainLooper())
+
+    /** E19 reactivation_landing：拉活落地首页真正展示后只上报一次（旋转重建不重报）。 */
+    private var landingReported = false
+    private var createdFromSavedState = false
     private val homePromptRunnable = Runnable { showHomeNotificationPrompt() }
 
     /** 通知权限引导（对齐 HyperVideo MainActivity.maybeShowHomeNotificationDialog）。 */
@@ -28,6 +34,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        createdFromSavedState = savedInstanceState != null
         // 提前初始化，确保权限 launcher 在 Activity 进入 STARTED 前完成注册
         permissionHost
         enableEdgeToEdge()
@@ -40,6 +47,15 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        // E19：拉活落地首页（cold/warm）后、页面真正可见时上报（不提前、不重复）。
+        if (!landingReported &&
+            !createdFromSavedState &&
+            intent.hasExtra(SplashActivity.EXTRA_SESSION_SOURCE)
+        ) {
+            landingReported = true
+            val source = intent.getStringExtra(SplashActivity.EXTRA_SESSION_SOURCE) ?: "cold"
+            TrackEvents.reactivationLanding(source, "home")
+        }
         // 每次首页显示都重新判定一次通知权限（系统框能弹就弹系统框）
         scheduleHomeNotificationPrompt()
         // Cold/hot app-start events only; route changes do not trigger the popup.

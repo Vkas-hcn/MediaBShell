@@ -7,8 +7,11 @@ import com.hdvideoplay.media.data.dto.DetailResponseDto
 import com.hdvideoplay.media.data.dto.OutsideLinkDto
 import com.hdvideoplay.media.data.dto.SeasonDto
 import com.hdvideoplay.media.data.probe.PlaySourceProbe
+import com.hdvideoplay.media.data.repo.ApiException
 import com.hdvideoplay.media.data.repo.MediaRepository
+import com.hdvideoplay.media.track.TrackEvents
 import com.hdvideoplay.media.ui.components.UiState
+import retrofit2.HttpException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -57,11 +60,22 @@ class DetailViewModel(
     private val mediaId: Int,
     private val initialEpisode: Int = 0,
     private val repo: MediaRepository = MediaRepository(),
+    /** 仅入口会话（intent 带 from_position）才上报 detail_request/view/error。 */
+    private val trackDetailEvents: Boolean = false,
+    private val fromPosition: String? = null,
+    private val moduleId: Int? = null,
+    private val autoPlay: Boolean = false,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<UiState<DetailUiModel>>(UiState.Loading)
     val state: StateFlow<UiState<DetailUiModel>> = _state.asStateFlow()
     private var loadJob: Job? = null
+
+    /** detail_error 一次刷新流程只报一次；每次 refresh() 重置。 */
+    private var detailErrorReported = false
+
+    /** detail_view 按数据实例身份去重（同一轮数据只报一次）。 */
+    private var detailViewReportedForData: DetailUiModel? = null
 
     init {
         if (mediaId <= 0) {
@@ -77,9 +91,14 @@ class DetailViewModel(
             return
         }
         loadJob?.cancel()
+        detailErrorReported = false
         loadJob = viewModelScope.launch {
             _state.value = UiState.Loading
+            // detail_request：详情页资源请求发起时上报（一次 refresh 含内部重试 = 一次请求）。
+            if (trackDetailEvents) TrackEvents.detailRequest()
             var lastError = "Unknown error"
+            var lastErrorCause: Throwable? = null
+            var lastDataNull = false
             repeat(MAX_DETAIL_ATTEMPTS) { attempt ->
                 val result = try {
                     repo.detail(mediaId)
@@ -104,14 +123,43 @@ class DetailViewModel(
                     loadLinks()
                     return@launch
                 }
-                lastError = result.exceptionOrNull()?.message
-                    ?: if (data == null) "Unknown error" else "Not found"
+                lastErrorCause = result.exceptionOrNull()
+                lastDataNull = data == null
+                lastError = lastErrorCause?.message
+                    ?: if (lastDataNull) "Unknown error" else "Not found"
                 if (attempt < MAX_DETAIL_ATTEMPTS - 1) {
                     delay(DETAIL_RETRY_DELAY_MS)
                 }
             }
+            reportDetailError(lastError, lastErrorCause, lastDataNull)
             _state.value = UiState.Error(lastError)
         }
+    }
+
+    /**
+     * detail_error：10 次尝试耗尽进入终端错误时上报一次；
+     * 同一次请求失败不会因多次重试/回调重复上报。
+     */
+    private fun reportDetailError(message: String, cause: Throwable?, dataNull: Boolean) {
+        if (!trackDetailEvents || detailErrorReported) return
+        detailErrorReported = true
+        val errorCode = when {
+            cause is ApiException -> cause.code
+            cause is HttpException -> cause.code().toString()
+            dataNull && cause == null -> "not_found"
+            cause != null -> cause.javaClass.simpleName
+            else -> "unknown"
+        }
+        TrackEvents.detailError(mediaId, errorCode, message)
+    }
+
+    /** detail_view：详情内容成功加载并展示时上报（同一轮数据只报一次）。 */
+    fun reportDetailShownOnce(data: DetailUiModel) {
+        if (!trackDetailEvents) return
+        if (detailViewReportedForData === data) return
+        detailViewReportedForData = data
+        val from = fromPosition ?: return
+        TrackEvents.detailView(mediaId, autoPlay, from, moduleId)
     }
 
     /** Load, probe all lines concurrently, then publish valid-first ordering. */
@@ -218,10 +266,22 @@ class DetailViewModel(
             mediaId: Int,
             initialEpisode: Int = 0,
             repo: MediaRepository = MediaRepository(),
+            trackDetailEvents: Boolean = false,
+            fromPosition: String? = null,
+            moduleId: Int? = null,
+            autoPlay: Boolean = false,
         ) = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                DetailViewModel(mediaId, initialEpisode, repo) as T
+                DetailViewModel(
+                    mediaId,
+                    initialEpisode,
+                    repo,
+                    trackDetailEvents,
+                    fromPosition,
+                    moduleId,
+                    autoPlay,
+                ) as T
         }
     }
 }

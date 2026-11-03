@@ -87,6 +87,8 @@ import com.hdvideoplay.media.data.api.MediaCdnHeaders
 import com.hdvideoplay.media.data.api.NetworkModule
 import com.hdvideoplay.media.data.dto.MediaItemDto
 import com.hdvideoplay.media.data.dto.PlaySourceDto
+import com.hdvideoplay.media.track.PlaySessionTracker
+import com.hdvideoplay.media.track.TrackEvents
 import com.hdvideoplay.media.util.CdnRequestHeaders
 import com.hdvideoplay.media.data.dto.SubtitleDto
 import com.hdvideoplay.media.ui.components.ErrorBox
@@ -114,6 +116,12 @@ class PlayerActivity : ComponentActivity() {
     private fun startPositionOf(i: Intent = intent): Long =
         i.getLongExtra(EXTRA_START_POSITION_MS, 0L)
 
+    private fun fromPositionOf(i: Intent = intent): String? = i.getStringExtra(EXTRA_FROM_POSITION)
+    private fun moduleIdOf(i: Intent = intent): Int? =
+        i.getIntExtra(EXTRA_MODULE_ID, 0).takeIf { it > 0 }
+
+    /** 播放会话状态机（play_start/progress/end 去重与观看时长累计）。 */
+    private lateinit var sessionTracker: PlaySessionTracker
 
     private var returnAdConsumed = false
 
@@ -124,6 +132,8 @@ class PlayerActivity : ComponentActivity() {
             return
         }
         returnAdConsumed = true
+        // play_end(back)：用户主动退出播放页（会话未出画则不上报；展示广告不影响）。
+        runCatching { sessionTracker.onUserExit() }
         // dwell≥60s → 成对; V2B short dwell → no ad (presentReturn returns false → finish).
         val leave = PageDwellTracker.leaveIfCurrent(PageDwellTracker.PLAYER, "return")
         val longDwell = leave?.longDwell == true
@@ -165,6 +175,11 @@ class PlayerActivity : ComponentActivity() {
         val titleExtra = titleOf()
         val initialLineIndex = lineIndexOf()
         val initialStartPositionMs = startPositionOf()
+        val fromPosition = fromPositionOf()
+        val moduleId = moduleIdOf()
+        sessionTracker = PlaySessionTracker(mediaId, episode, reporter = { event, props ->
+            TrackEvents.bi(event, props)
+        })
         Log.i(
             "PlayerActivity",
             "onCreate mediaId=$mediaId episode=$episode line=$initialLineIndex " +
@@ -187,6 +202,9 @@ class PlayerActivity : ComponentActivity() {
                         mediaId,
                         episode,
                         initialLineIndex,
+                        trackDetailEvents = fromPosition != null,
+                        fromPosition = fromPosition,
+                        moduleId = moduleId,
                     ),
                 )
                 val state by viewModel.linksState.collectAsStateWithLifecycle()
@@ -223,6 +241,7 @@ class PlayerActivity : ComponentActivity() {
                                 mediaId = id,
                                 episode = 0,
                                 title = item.title,
+                                fromPosition = TrackEvents.FROM_RECOMMEND,
                             ),
                         )
                     }
@@ -291,6 +310,8 @@ class PlayerActivity : ComponentActivity() {
                         is UiState.Success -> {
                             PlayerContent(
                                 ready = s.data,
+                                tracker = sessionTracker,
+                                onContentShown = { viewModel.reportDetailShownOnce(s.data) },
                                 title = titleExtra.ifBlank {
                                     detailMeta?.detail?.details?.title
                                         ?.takeIf { it.isNotBlank() }
@@ -309,9 +330,10 @@ class PlayerActivity : ComponentActivity() {
                                 onSwitchEpisode = viewModel::switchEpisode,
                                 onOpenRecommend = openRecommend,
                                 onSourceReady = viewModel::onSourceReady,
-                                onSourceFailed = {
+                                onSourceFailed = { errorMsg ->
                                     viewModel.onSourceFailed(
                                         getString(R.string.play_failed_toast),
+                                        errorMsg,
                                     )
                                 },
                                 onEnterFullscreen = {
@@ -339,6 +361,12 @@ class PlayerActivity : ComponentActivity() {
         recreate()
     }
 
+    override fun onDestroy() {
+        // 兜底：系统回收/任务移除时，若会话已开始且未结束则补 play_end(back)。
+        runCatching { sessionTracker.onDestroyFallback() }
+        super.onDestroy()
+    }
+
     /** Keep EXTRA_MEDIA_ID when system Up synthesizes the parent DetailActivity. */
     override fun getParentActivityIntent(): Intent? {
         val mid = mediaIdOf()
@@ -360,6 +388,8 @@ class PlayerActivity : ComponentActivity() {
         const val EXTRA_START_FULLSCREEN = "EXTRA_START_FULLSCREEN"
         const val EXTRA_LINE_INDEX = "EXTRA_LINE_INDEX"
         const val EXTRA_START_POSITION_MS = "EXTRA_START_POSITION_MS"
+        const val EXTRA_FROM_POSITION = "EXTRA_FROM_POSITION"
+        const val EXTRA_MODULE_ID = "EXTRA_MODULE_ID"
 
         fun createIntent(
             context: Context,
@@ -369,6 +399,8 @@ class PlayerActivity : ComponentActivity() {
             startFullscreen: Boolean = false,
             lineIndex: Int = 0,
             startPositionMs: Long = 0L,
+            fromPosition: String? = null,
+            moduleId: Int? = null,
         ): Intent = Intent(context, PlayerActivity::class.java).apply {
             putExtra(EXTRA_MEDIA_ID, mediaId)
             putExtra(EXTRA_EPISODE, episode)
@@ -376,6 +408,8 @@ class PlayerActivity : ComponentActivity() {
             putExtra(EXTRA_START_FULLSCREEN, startFullscreen)
             putExtra(EXTRA_LINE_INDEX, lineIndex)
             putExtra(EXTRA_START_POSITION_MS, startPositionMs)
+            if (fromPosition != null) putExtra(EXTRA_FROM_POSITION, fromPosition)
+            if (moduleId != null) putExtra(EXTRA_MODULE_ID, moduleId)
         }
     }
 }
@@ -600,6 +634,8 @@ private fun PlayerContent(
     currentEpisode: Int,
     startPositionMs: Long = 0L,
     linksProbing: Boolean = false,
+    tracker: PlaySessionTracker,
+    onContentShown: () -> Unit,
     onBack: () -> Unit,
     onSelectLine: (Int) -> Unit,
     onSelectSource: (Int) -> Unit,
@@ -607,7 +643,7 @@ private fun PlayerContent(
     onSwitchEpisode: (Int) -> Unit,
     onOpenRecommend: (MediaItemDto) -> Unit,
     onSourceReady: () -> Unit,
-    onSourceFailed: () -> Boolean,
+    onSourceFailed: (errorMsg: String?) -> Boolean,
     onEnterFullscreen: () -> Unit,
     onExitFullscreen: () -> Unit,
 ) {
@@ -615,6 +651,12 @@ private fun PlayerContent(
     val source = ready.currentSource
     val onReadyLatest = rememberUpdatedState(onSourceReady)
     val onFailedLatest = rememberUpdatedState(onSourceFailed)
+
+    // detail_view：详情内容（播放页）首次成功展示时上报一次（VM 内按数据身份去重）。
+    LaunchedEffect(Unit) { onContentShown() }
+
+    // 集数切换 → 新播放会话（进度档位/watched/maxPct 重置；旧集静默结束）。
+    LaunchedEffect(currentEpisode) { tracker.onEpisodeChanged(currentEpisode) }
     val landscape =
         LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
@@ -718,6 +760,15 @@ private fun PlayerContent(
                     playerEverReady = true
                     isBuffering = false
                 }
+                if (playbackState == Player.STATE_ENDED) {
+                    // play_end(complete)：视频正常播放完成（每会话只报一次，防销毁回调重报）。
+                    tracker.onCompleted()
+                }
+            }
+
+            override fun onRenderedFirstFrame() {
+                // play_start：视频画面真正开始显示（出画），每会话只报一次。
+                tracker.onFirstFrame()
             }
 
             override fun onTracksChanged(tracks: Tracks) {
@@ -780,6 +831,8 @@ private fun PlayerContent(
             positionMs = player.currentPosition.coerceAtLeast(0L)
             val d = player.duration
             durationMs = if (d > 0) d else 0L
+            // 播放会话：真实观看时长累计 + 25/50/75/100 进度档位上报（会话内去重）。
+            tracker.onPositionTick(positionMs, durationMs, isPlaying, isBuffering)
             // V2 D: N×10min progress boundaries (not wall-clock hd_play_interval).
             AdLogicV2.onPlaybackProgress(positionMs, act)
             delay(500)
@@ -792,11 +845,14 @@ private fun PlayerContent(
         ?.joinToString("|") { "${it.key.lowercase()}=${it.value}" }
         .orEmpty()
     LaunchedEffect(ready.lineIndex, ready.sourceIndex, source?.url, headersKey) {
+        val lineName = ready.currentLine?.name?.takeIf { it.isNotBlank() }
+            ?: "Line ${ready.lineIndex + 1}"
+        tracker.onPrepareStarted(lineName)
         val src = source
         if (src == null || src.url.isBlank()) {
             isSwitchingSource = false
             isBuffering = false
-            onFailedLatest.value()
+            if (!onFailedLatest.value(null)) tracker.onErrorEnd()
             return@LaunchedEffect
         }
         isSwitchingSource = true
@@ -817,6 +873,7 @@ private fun PlayerContent(
                                 startPositionMs
                             }
                             player.seekTo(target)
+                            tracker.onSeeked(target, if (duration > 0L) duration else 0L)
                             Log.i("PlayerActivity", "initial resume seek to ${target}ms")
                         }
                     }
@@ -833,7 +890,10 @@ private fun PlayerContent(
                     "playbackError code=${error.errorCode} name=${error.errorCodeName} msg=${error.message} cause=${error.cause}",
                     error,
                 )
-                onFailedLatest.value()
+                // 线路失败：VM 自动推进换线；全部耗尽时结束会话（play_end(error)）。
+                if (!onFailedLatest.value("${error.errorCodeName}: ${error.message}")) {
+                    tracker.onErrorEnd()
+                }
             }
         }
         player.addListener(listener)
@@ -847,10 +907,12 @@ private fun PlayerContent(
         } catch (ce: CancellationException) {
             // Line/quality change or failover cancels this effect — must NOT treat as play failure.
             throw ce
-        } catch (_: Throwable) {
+        } catch (t: Throwable) {
             isSwitchingSource = false
             isBuffering = false
-            onFailedLatest.value()
+            if (!onFailedLatest.value(t.message ?: "prepare_failed")) {
+                tracker.onErrorEnd()
+            }
         } finally {
             player.removeListener(listener)
         }
@@ -862,6 +924,7 @@ private fun PlayerContent(
         val clamped = if (dur > 0) target.coerceAtMost(dur) else target
         player.seekTo(clamped)
         writeWatchHistory(force = false, posMs = clamped, durMs = if (dur > 0) dur else 0L)
+        tracker.onSeeked(clamped, if (dur > 0) dur else 0L)
         AdLogicV2.onPlaybackProgress(clamped, context as? android.app.Activity)
     }
 
@@ -951,6 +1014,7 @@ private fun PlayerContent(
                 onSeek = {
                     player.seekTo(it)
                     writeWatchHistory(force = false, posMs = it)
+                    tracker.onSeeked(it, durationMs)
                     AdLogicV2.onPlaybackProgress(it, context as? android.app.Activity)
                 },
                 onToggleCc = {

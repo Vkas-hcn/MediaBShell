@@ -50,6 +50,10 @@ fun DetailScreen(
     ),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    // detail_view：详情内容成功加载并展示时上报（VM 按数据实例身份去重）。
+    LaunchedEffect(state) {
+        (state as? UiState.Success<DetailUiModel>)?.let { viewModel.reportDetailShownOnce(it.data) }
+    }
     val current = state
     if (current is UiState.Error) {
         DetailErrorState(
@@ -207,6 +211,7 @@ private fun DetailContent(
                         contentDescription = title,
                         placeholderRes = R.drawable.ic_video_placeholder,
                         modifier = Modifier.fillMaxSize(),
+                        trackMediaId = mediaId,
                     )
                     Box(
                         Modifier

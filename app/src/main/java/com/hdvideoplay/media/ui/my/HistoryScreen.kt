@@ -34,6 +34,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hdvideoplay.media.R
 import com.hdvideoplay.media.data.local.WatchHistoryRepository
 import com.hdvideoplay.media.data.local.WatchProgress
+import com.hdvideoplay.media.track.TrackEvents
 import com.hdvideoplay.media.ui.components.PosterImage
 import com.hdvideoplay.media.ui.player.PlayerActivity
 import com.hdvideoplay.media.ui.theme.VideoPlayDimens
@@ -59,6 +60,7 @@ fun HistoryScreen(
                 mediaId = item.mediaId,
                 episode = item.episode ?: 0,
                 title = item.title,
+                fromPosition = TrackEvents.FROM_HISTORY,
             ),
         )
     }
@@ -157,6 +159,7 @@ private fun HistoryPoster(
                 posterPath = item.poster.takeIf { it.isNotBlank() },
                 contentDescription = item.title,
                 modifier = Modifier.fillMaxSize(),
+                trackMediaId = item.mediaId,
             )
             if (progress > 0f) {
                 LinearProgressIndicator(

@@ -11,9 +11,12 @@ import com.hdvideoplay.media.data.dto.OutsideLinkDto
 import com.hdvideoplay.media.data.dto.PlayReportBody
 import com.hdvideoplay.media.data.dto.PlaySourceDto
 import com.hdvideoplay.media.data.probe.PlaySourceProbe
+import com.hdvideoplay.media.data.repo.ApiException
 import com.hdvideoplay.media.data.repo.MediaRepository
+import com.hdvideoplay.media.track.TrackEvents
 import com.hdvideoplay.media.ui.components.UiState
 import com.hdvideoplay.media.util.asIntOrNull
+import retrofit2.HttpException
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -56,9 +59,19 @@ class PlayerViewModel(
     initialEpisode: Int,
     private val initialLineIndex: Int = 0,
     private val repo: MediaRepository = MediaRepository(),
+    /** 仅入口会话（intent 带 from_position）才上报 detail_request/view/error。 */
+    private val trackDetailEvents: Boolean = false,
+    private val fromPosition: String? = null,
+    private val moduleId: Int? = null,
 ) : AndroidViewModel(app) {
 
     private var episode: Int = initialEpisode
+
+    /** play_fail 去重：同一次播放会话内同一线路同一错误只报一次；集数切换重置。 */
+    private val reportedFailKeys = mutableSetOf<String>()
+
+    /** detail_view 按数据实例身份去重（同一轮数据只报一次）。 */
+    private var detailViewReportedForData: PlayerReady? = null
 
     private val _linksState = MutableStateFlow<UiState<PlayerReady>>(UiState.Loading)
     val linksState: StateFlow<UiState<PlayerReady>> = _linksState.asStateFlow()
@@ -125,8 +138,11 @@ class PlayerViewModel(
             if (showLoading || _linksState.value !is UiState.Success) {
                 _linksState.value = UiState.Loading
             }
+            // detail_request：详情页（本应用内容入口直接落播放页）资源请求发起时上报。
+            if (trackDetailEvents) TrackEvents.detailRequest()
             val result = repo.outsideLinks(mediaId, episode)
             val data = result.getOrElse { err ->
+                reportLinksLoadError(err.message ?: "Unknown error", err)
                 _linksState.value = UiState.Error(err.message ?: "Unknown error")
                 return@launch
             }
@@ -136,6 +152,7 @@ class PlayerViewModel(
             }
             if (raw.isEmpty()) {
                 // API truly empty — not probe-empty.
+                reportLinksLoadError("empty_links", null)
                 _linksState.value = UiState.Error("empty_links")
                 return@launch
             }
@@ -174,6 +191,7 @@ class PlayerViewModel(
                 val orderedProbed = PlaySourceProbe.validFirst(probed)
                 val firstValid = orderedProbed.indexOfFirst { it.isValid }
                 if (firstValid < 0) {
+                    reportLinksLoadError("no_alive_links", null)
                     _linksState.value = UiState.Error("no_alive_links")
                     return@launch
                 }
@@ -232,11 +250,45 @@ class PlayerViewModel(
         if (newEpisode == episode && _linksState.value is UiState.Success) return
         episode = newEpisode
         _currentEpisode.value = newEpisode
+        reportedFailKeys.clear()
         loadLinks(showLoading = false)
     }
 
-    fun onSourceFailed(userMessage: String? = null): Boolean {
+    /**
+     * detail_error：links 资源请求/加载失败（每次请求失败报一次，重试失败可再报）。
+     */
+    private fun reportLinksLoadError(message: String, cause: Throwable?) {
+        if (!trackDetailEvents) return
+        val errorCode = when {
+            cause is ApiException -> cause.code
+            cause is HttpException -> cause.code().toString()
+            cause != null -> cause.javaClass.simpleName
+            else -> message
+        }
+        TrackEvents.detailError(mediaId, errorCode, message)
+    }
+
+    /** detail_view：links 资源成功加载并展示时上报（同一轮数据只报一次）。 */
+    fun reportDetailShownOnce(data: PlayerReady) {
+        if (!trackDetailEvents) return
+        if (detailViewReportedForData === data) return
+        detailViewReportedForData = data
+        val from = fromPosition ?: return
+        // 内容入口现状恒为自动播放（方案 A：进播放页即自动播）。
+        TrackEvents.detailView(mediaId, autoPlay = true, fromPosition = from, moduleId = moduleId)
+    }
+
+    /**
+     * play_fail：当前线路播放失败时上报；全部线路耗尽时额外记录 line_name="all"
+     * 的最终失败情况（区分单线路失败与全部线路失败）。
+     */
+    fun onSourceFailed(userMessage: String? = null, errorMsg: String? = null): Boolean {
         val current = (_linksState.value as? UiState.Success)?.data ?: return false
+        val lineName = current.currentLine?.name.orEmpty().ifBlank { "Line ${current.lineIndex + 1}" }
+        val msg = errorMsg.orEmpty().ifBlank { "unknown_error" }
+        if (reportedFailKeys.add("${current.lineIndex}|$msg")) {
+            TrackEvents.playFail(mediaId, episode, lineName, msg)
+        }
         report(current, success = false)
         if (userMessage != null) {
             _events.tryEmit(PlayerEvent.Toast(userMessage))
@@ -246,6 +298,9 @@ class PlayerViewModel(
             _linksState.value = UiState.Success(next)
             true
         } else {
+            if (reportedFailKeys.add("all|$msg")) {
+                TrackEvents.playFail(mediaId, episode, "all", msg)
+            }
             _events.tryEmit(PlayerEvent.AllFailed)
             false
         }
@@ -295,10 +350,22 @@ class PlayerViewModel(
             episode: Int,
             initialLineIndex: Int = 0,
             repo: MediaRepository = MediaRepository(),
+            trackDetailEvents: Boolean = false,
+            fromPosition: String? = null,
+            moduleId: Int? = null,
         ) = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                PlayerViewModel(app, mediaId, episode, initialLineIndex, repo) as T
+                PlayerViewModel(
+                    app,
+                    mediaId,
+                    episode,
+                    initialLineIndex,
+                    repo,
+                    trackDetailEvents,
+                    fromPosition,
+                    moduleId,
+                ) as T
         }
     }
 }

@@ -17,10 +17,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,7 +51,8 @@ import com.hdvideoplay.media.ui.theme.VideoPlayFontFamily
 @Composable
 fun HomeScreen(
     onOpenModule: (moduleId: Int, title: String) -> Unit,
-    onOpenDetail: (MediaItemDto) -> Unit,
+    /** moduleId：点击来源模块（detail_view 的 module_id 补充参数）。 */
+    onOpenDetail: (MediaItemDto, moduleId: Int?) -> Unit,
     viewModel: HomeViewModel = viewModel(factory = HomeViewModel.factory()),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -60,10 +63,15 @@ fun HomeScreen(
             if (s.data.isEmpty()) {
                 EmptyBox()
             } else {
+                // home_view：首页内容真正展示成功后上报（同一轮数据只报一次，VM 内去重）。
+                LaunchedEffect(s.data) { viewModel.reportHomeViewOnce(s.data) }
                 HomeContent(
                     modules = s.data,
                     onOpenModule = onOpenModule,
                     onOpenDetail = onOpenDetail,
+                    onModuleShown = { module, index ->
+                        viewModel.reportModuleShownOnce(module, index, s.data)
+                    },
                 )
             }
         }
@@ -74,7 +82,8 @@ fun HomeScreen(
 private fun HomeContent(
     modules: List<HomeModuleDto>,
     onOpenModule: (moduleId: Int, title: String) -> Unit,
-    onOpenDetail: (MediaItemDto) -> Unit,
+    onOpenDetail: (MediaItemDto, Int?) -> Unit,
+    onModuleShown: (HomeModuleDto, Int) -> Unit,
 ) {
     // No drawer — centered wordmark + module rails.
     LazyColumn(
@@ -86,9 +95,12 @@ private fun HomeContent(
             // Lanhu: 56dp header + 24dp before the first section title.
             BrandWordmark(modifier = Modifier.padding(bottom = 8.dp))
         }
-        items(modules, key = { it.id }) { module ->
+        itemsIndexed(modules, key = { _, module -> module.id }) { index, module ->
             ModuleRow(
                 module = module,
+                moduleIndex = index,
+                dataKey = modules,
+                onShown = { onModuleShown(module, index) },
                 onMore = { onOpenModule(module.id, module.moduleName) },
                 onOpenDetail = onOpenDetail,
             )
@@ -99,9 +111,14 @@ private fun HomeContent(
 @Composable
 private fun ModuleRow(
     module: HomeModuleDto,
+    moduleIndex: Int,
+    dataKey: List<HomeModuleDto>,
+    onShown: () -> Unit,
     onMore: () -> Unit,
-    onOpenDetail: (MediaItemDto) -> Unit,
+    onOpenDetail: (MediaItemDto, Int?) -> Unit,
 ) {
+    // 模块行进入组合即视为真正展示；VM 侧按数据轮次去重，避免滚动/刷新重复上报。
+    LaunchedEffect(module.id, dataKey) { onShown() }
     Column(Modifier.fillMaxWidth()) {
         Row(
             Modifier
@@ -156,7 +173,7 @@ private fun ModuleRow(
             items(module.data, key = { it.localId() }) { item ->
                 MediaPosterCard(
                     item = item,
-                    onClick = { onOpenDetail(item) },
+                    onClick = { onOpenDetail(item, module.id) },
                     widthDp = VideoPlayDimens.PosterWidth,
                     maxTitleLines = 1,
                 )

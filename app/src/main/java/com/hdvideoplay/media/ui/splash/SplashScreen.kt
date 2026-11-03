@@ -48,6 +48,8 @@ import kotlinx.coroutines.delay
 fun SplashLoadingScreen(
     onFinished: () -> Unit,
     holdMs: Long = 1400L,
+    /** 组合完成、Loading 即将真正展示时回调一次（loading_show 埋点）。 */
+    onShown: () -> Unit = {},
 ) {
     var target by remember { mutableFloatStateOf(0f) }
     val progress by animateFloatAsState(
@@ -60,6 +62,7 @@ fun SplashLoadingScreen(
     )
 
     LaunchedEffect(Unit) {
+        onShown()
         target = 1f
         delay(holdMs)
         onFinished()

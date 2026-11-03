@@ -41,6 +41,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hdvideoplay.media.R
 import com.hdvideoplay.media.data.local.WatchHistoryRepository
 import com.hdvideoplay.media.data.local.WatchProgress
+import com.hdvideoplay.media.track.TrackEvents
 import com.hdvideoplay.media.ui.components.PosterImage
 import com.hdvideoplay.media.ui.nav.NavIcons
 import com.hdvideoplay.media.ui.player.PlayerActivity
@@ -71,6 +72,7 @@ fun MyScreen(
                 title = item.title,
                 startFullscreen = false,
                 lineIndex = 0,
+                fromPosition = TrackEvents.FROM_MY,
             ),
         )
     }
@@ -230,6 +232,7 @@ private fun ContinuePoster(
                 posterPath = item.poster.takeIf { it.isNotBlank() },
                 contentDescription = item.title,
                 modifier = Modifier.fillMaxSize(),
+                trackMediaId = item.mediaId,
             )
             if (showProgress && progress > 0f) {
                 LinearProgressIndicator(

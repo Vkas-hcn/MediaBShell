@@ -16,6 +16,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,6 +39,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.hdvideoplay.media.R
 import com.hdvideoplay.media.data.dto.MediaItemDto
+import com.hdvideoplay.media.track.TrackEvents
 import com.hdvideoplay.media.ui.theme.ChipBg
 import com.hdvideoplay.media.ui.theme.MutedText
 import com.hdvideoplay.media.ui.theme.PosterTitle
@@ -78,6 +83,7 @@ fun MediaPosterCard(
                 posterPath = item.posterPath,
                 contentDescription = item.title,
                 modifier = Modifier.fillMaxSize(),
+                trackMediaId = item.localId(),
             )
             val showRank = rank != null && rank >= 1 && rank <= maxRankBadge
             if (showRank) {
@@ -162,9 +168,13 @@ fun PosterImage(
     contentDescription: String?,
     modifier: Modifier = Modifier,
     placeholderRes: Int = R.drawable.ic_poster_placeholder,
+    /** 海报所属媒体 ID：传值即开启 image_load_fail 上报（仅海报，不覆盖所有图片）。 */
+    trackMediaId: Int? = null,
 ) {
     val url = PosterUtils.resolvePosterUrl(posterPath)
     val context = LocalContext.current
+    // image_load_fail 去重：同一组合内同一 URL 只报一次，避免组件重复回调重复上报。
+    var loadFailReported by remember(url) { mutableStateOf(false) }
     Box(
         modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center,
@@ -180,6 +190,16 @@ fun PosterImage(
                 modifier = Modifier.fillMaxSize(),
                 error = painterResource(placeholderRes),
                 placeholder = painterResource(placeholderRes),
+                onError = {
+                    val mediaId = trackMediaId
+                    if (mediaId != null && mediaId > 0 && !loadFailReported) {
+                        loadFailReported = true
+                        val host = runCatching { android.net.Uri.parse(url).host }
+                            .getOrNull()
+                            .orEmpty()
+                        TrackEvents.imageLoadFail(host, mediaId)
+                    }
+                },
             )
         } else {
             Image(

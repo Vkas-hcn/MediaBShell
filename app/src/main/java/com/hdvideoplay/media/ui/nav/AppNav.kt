@@ -55,6 +55,7 @@ import com.hdvideoplay.media.ads.NativeReturnPresenter
 import com.hdvideoplay.media.ads.PageDwellTracker
 import com.hdvideoplay.media.data.dto.MediaItemDto
 import com.hdvideoplay.media.data.local.WatchHistoryRepository
+import com.hdvideoplay.media.track.TrackEvents
 import com.hdvideoplay.media.ui.channel.ChannelScreen
 import com.hdvideoplay.media.ui.home.HomeScreen
 import com.hdvideoplay.media.ui.module.ModuleScreen
@@ -194,7 +195,10 @@ fun AppNav() {
     }
 
 
-    fun openDetail(item: MediaItemDto) {
+    /**
+     * 内容入口统一落 PlayerActivity（方案 A 现状不变）；from_position 记录详情来源。
+     */
+    fun openDetail(item: MediaItemDto, fromPosition: String, moduleId: Int? = null) {
         // Play-auto brief (方案 A): content entries open PlayerActivity directly with autoPlay.
         // Prefer media_id; fall back to id (daily). Log both to catch Dragonflies dual hits.
         val id = item.localId()
@@ -220,6 +224,8 @@ fun AppNav() {
                 title = item.title,
                 startFullscreen = false,
                 lineIndex = 0,
+                fromPosition = fromPosition,
+                moduleId = moduleId,
             ),
         )
     }
@@ -313,14 +319,24 @@ fun AppNav() {
                     onOpenModule = { id, title ->
                         navController.navigate(Routes.module(id, title))
                     },
-                    onOpenDetail = ::openDetail,
+                    onOpenDetail = { item, moduleId ->
+                        openDetail(item, TrackEvents.FROM_HOME_MODULE, moduleId)
+                    },
                 )
             }
             composable(Routes.CHANNEL) {
-                ChannelScreen(onOpenDetail = ::openDetail)
+                ChannelScreen(
+                    onOpenDetail = { item ->
+                        openDetail(item, TrackEvents.FROM_CHANNEL)
+                    },
+                )
             }
             composable(Routes.SEARCH) {
-                SearchScreen(onOpenDetail = ::openDetail)
+                SearchScreen(
+                    onOpenDetail = { item ->
+                        openDetail(item, TrackEvents.FROM_SEARCH)
+                    },
+                )
             }
             composable(Routes.MY) {
                 MyScreen(
@@ -356,7 +372,9 @@ fun AppNav() {
                     moduleId = moduleId,
                     title = title,
                     onBack = { navController.popBackStack() },
-                    onOpenDetail = ::openDetail,
+                    onOpenDetail = { item ->
+                        openDetail(item, TrackEvents.FROM_HOME_MODULE, moduleId)
+                    },
                 )
             }
         }
@@ -373,6 +391,7 @@ fun AppNav() {
                             startFullscreen = false,
                             lineIndex = 0,
                             startPositionMs = progress.progressSec * 1000L,
+                            fromPosition = TrackEvents.FROM_RESUME,
                         ),
                     )
                 },
@@ -386,14 +405,29 @@ fun AppNav() {
             // only fires for cold/hot starts, never for tab or route changes.
             // It is a Dialog window so the scrim covers the system bars.
             when (val recall = recallState) {
-                is RecallPopupUiState.Visible -> RecallPopup(
-                    downloadUrl = recall.downloadUrl,
-                    onDismiss = RecallPopupController::dismiss,
-                    onUpgrade = { url ->
-                        RecallPopupController.dismiss()
-                        RecallPopupController.openDownload(context, url)
-                    },
-                )
+                is RecallPopupUiState.Visible -> {
+                    // 同一次弹窗展示生命周期内：点击/忽略各只上报一次；点击不误判为忽略。
+                    var clickReported by remember(recall) { mutableStateOf(false) }
+                    var dismissReported by remember(recall) { mutableStateOf(false) }
+                    RecallPopup(
+                        downloadUrl = recall.downloadUrl,
+                        onDismiss = {
+                            if (!dismissReported) {
+                                dismissReported = true
+                                TrackEvents.recallDismiss()
+                            }
+                            RecallPopupController.dismiss()
+                        },
+                        onUpgrade = { url ->
+                            if (!clickReported) {
+                                clickReported = true
+                                TrackEvents.recallClick()
+                            }
+                            RecallPopupController.dismiss()
+                            RecallPopupController.openDownload(context, url)
+                        },
+                    )
+                }
                 RecallPopupUiState.Hidden -> Unit
             }
         }

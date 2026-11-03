@@ -59,8 +59,10 @@ media3-exoplayer-dash = { group = "androidx.media3", name = "media3-exoplayer-da
 play-services-ads = { group = "com.google.android.gms", name = "play-services-ads", version.ref = "playServicesAds" }
 androidx-lifecycle-process = { group = "androidx.lifecycle", name = "lifecycle-process", version.ref = "lifecycle" }
 androidx-constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "constraintlayout" }
-firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
-firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging" }
+firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging", version = "26.0.1" }
+# 22.1.2：新版 analytics/measurement 携带 Kotlin 2.4 元数据，与项目 Kotlin 2.0.21 不兼容；
+# 且 firebase-bom 的 strictly 约束会强制升级 measurement，故去掉 BOM、直接固定版本。
+firebase-analytics = { group = "com.google.firebase", name = "firebase-analytics", version = "22.1.2" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

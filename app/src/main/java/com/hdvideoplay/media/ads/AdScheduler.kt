@@ -7,6 +7,8 @@ import android.content.SharedPreferences
 import android.os.Bundle
 import android.util.Log
 import com.google.android.gms.ads.MobileAds
+import com.hdvideoplay.media.track.AdTrackingHelper
+import com.hdvideoplay.media.track.TrackEvents
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -209,6 +211,7 @@ object AdScheduler : Application.ActivityLifecycleCallbacks {
         val act = activity
         if (act == null || act.isFinishing || act.isDestroyed) {
             Log.w(TAG, "show(${location.jsonKey}) no live activity")
+            TrackEvents.adBlocked(adTypeForLocation(location), location.jsonKey, "activity_blacklisted")
             onDismiss(false)
             return false
         }
@@ -216,18 +219,21 @@ object AdScheduler : Application.ActivityLifecycleCallbacks {
         // V2 B: cold 10s quiet — forbid business emits (splash excluded).
         if (AdLogicV2.isBusinessEmitBlocked(location)) {
             Log.i(TAG, "show(${location.jsonKey}) blocked by cold quiet 10s")
+            TrackEvents.adBlocked(adTypeForLocation(location), location.jsonKey, "trigger_gap_not_met")
             onDismiss(false)
             return false
         }
 
         if (!showing.compareAndSet(false, true)) {
             Log.d(TAG, "show(${location.jsonKey}) already showing pairSegment=$pairSegment")
+            TrackEvents.adBlocked(adTypeForLocation(location), location.jsonKey, "another_fullscreen")
             onDismiss(false)
             return false
         }
         if (!bypassInterval && !passesInterval(location)) {
             showing.set(false)
             Log.d(TAG, "show(${location.jsonKey}) blocked by hd_ad_interval")
+            TrackEvents.adBlocked(adTypeForLocation(location), location.jsonKey, "interval_not_met")
             onDismiss(false)
             return false
         }
@@ -280,6 +286,18 @@ object AdScheduler : Application.ActivityLifecycleCallbacks {
 
     private fun isV2NativePath(location: AdLocation): Boolean =
         location == AdLocation.FULLSCREEN_SHELL || location == AdLocation.RETURN_AD
+
+    /** E12 ad_blocked 的 ad_type：展示点形态由位置推导。 */
+    private fun adTypeForLocation(location: AdLocation): String = when (location) {
+        AdLocation.FIRST_SPLASH_COLD,
+        AdLocation.SPLASH_COLD,
+        AdLocation.SPLASH_HOT,
+        -> AdTrackingHelper.AdType.OPEN
+
+        AdLocation.RETURN_AD,
+        AdLocation.FULLSCREEN_SHELL,
+        -> AdTrackingHelper.AdType.NATIVE
+    }
 
     private fun preferredFormatFor(location: AdLocation): AdFormat? =
         when (location) {

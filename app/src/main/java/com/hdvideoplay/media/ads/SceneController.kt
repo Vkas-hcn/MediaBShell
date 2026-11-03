@@ -126,7 +126,8 @@ class SceneController(
         }
         val timeoutMs = AdPolicy.nodeTimeoutMs()
         runCatching {
-            loader.load(appContext(), node, timeoutMs) { result ->
+            // posId = 加载场景名（装弹池）；展示侧事件用 AdLocation.jsonKey。
+            loader.load(appContext(), node, timeoutMs, sceneName) { result ->
                 when (result) {
                     is AdLoadResult.Success -> {
                         val entry = result.entry.copy(scene = sceneName)

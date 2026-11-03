@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,6 +45,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.view.WindowCompat
 import com.hdvideoplay.media.R
+import com.hdvideoplay.media.track.TrackEvents
 import com.hdvideoplay.media.ui.theme.BrandGold
 import com.hdvideoplay.media.ui.theme.VideoPlayFontFamily
 import kotlin.math.min
@@ -69,6 +71,8 @@ internal fun RecallPopup(
     onUpgrade: (String) -> Unit,
 ) {
     val closeLabel = stringResource(R.string.recall_close)
+    // recall_show：弹窗真正展示成功后上报（每次 Visible 状态进入组合 = 一次展示）。
+    LaunchedEffect(Unit) { TrackEvents.recallShow() }
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(

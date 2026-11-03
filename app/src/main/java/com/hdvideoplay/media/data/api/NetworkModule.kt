@@ -1,6 +1,7 @@
 package com.hdvideoplay.media.data.api
 
 import com.hdvideoplay.media.BuildConfig
+import com.hdvideoplay.media.track.TrackEvents
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import kotlinx.serialization.json.Json
 import okhttp3.Interceptor
@@ -47,9 +48,43 @@ object NetworkModule {
         }
     }
 
+    /**
+     * api_error：MediaApi 接口 HTTP 错误 / 网络异常上报。
+     * 仅挂在本 API 客户端（CDN/探测客户端不受影响）；业务失败（HTTP 200 + code!=1）
+     * 由 MediaRepository 上报，两条路径互斥不重报。
+     * 网络异常无 HTTP 状态码时 http_code=0（不伪造状态码）。
+     */
+    private val apiErrorInterceptor = Interceptor { chain ->
+        val apiName = TrackEvents.apiNameForPath(chain.request().url.encodedPath)
+        val start = android.os.SystemClock.elapsedRealtime()
+        if (apiName == null) {
+            chain.proceed(chain.request())
+        } else {
+            try {
+                val response = chain.proceed(chain.request())
+                if (response.code !in 200..299) {
+                    TrackEvents.apiError(
+                        api = apiName,
+                        httpCode = response.code,
+                        costMs = android.os.SystemClock.elapsedRealtime() - start,
+                    )
+                }
+                response
+            } catch (t: java.io.IOException) {
+                TrackEvents.apiError(
+                    api = apiName,
+                    httpCode = 0,
+                    costMs = android.os.SystemClock.elapsedRealtime() - start,
+                )
+                throw t
+            }
+        }
+    }
+
     val okHttpClient: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
+        .addInterceptor(apiErrorInterceptor)
         .addInterceptor(logging)
         .build()
 

@@ -23,6 +23,8 @@ import com.hdvideoplay.media.ads.AdScheduler
 import com.hdvideoplay.media.data.notice.HintUtil
 import com.hdvideoplay.media.permission.NotificationPermissionHelper
 import com.hdvideoplay.media.startup.HotStartManager
+import com.hdvideoplay.media.track.AdTrackingHelper
+import com.hdvideoplay.media.track.TrackEvents
 import com.hdvideoplay.media.ui.detail.DetailActivity
 import com.hdvideoplay.media.ui.theme.MediaTheme
 import com.hdvideoplay.media.ui.uninstall.UninstallEntry
@@ -45,6 +47,9 @@ class SplashActivity : ComponentActivity() {
     private var notifRequested = false
     private var notificationClickReported = false
     private var hotStartPoll: Runnable? = null
+
+    /** Loading 页面真正展示成功后上报一次（热启动重启流程不重复上报）。 */
+    private var loadingShowReported = false
 
     /** 通知权限状态机；必须在 onCreate 里取一次，保证 launcher 注册早于 STARTED。 */
     private val permissionHost by lazy { NotificationPermissionHelper.bind(this) }
@@ -102,6 +107,7 @@ class SplashActivity : ComponentActivity() {
                 SplashLoadingScreen(
                     holdMs = if (isHotStart) HOT_HOLD_MS else COLD_HOLD_MS,
                     onFinished = ::onSplashFinished,
+                    onShown = ::reportLoadingShown,
                 )
             }
         }
@@ -152,6 +158,13 @@ class SplashActivity : ComponentActivity() {
         super.onDestroy()
     }
 
+    /** loading_show：Loading 页面真正展示成功后上报（Activity 实例内只报一次）。 */
+    private fun reportLoadingShown() {
+        if (loadingShowReported) return
+        loadingShowReported = true
+        TrackEvents.loadingShow()
+    }
+
     private fun onSplashFinished() {
         if (flowStarted || pendingFlow || finishing || isFinishing || isDestroyed) return
         if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
@@ -178,6 +191,25 @@ class SplashActivity : ComponentActivity() {
         notificationClickReported = true
         runCatching { TrackSDK.track("news_notification_click", null, TrackPolicy.IMMEDIATE) }
             .onFailure { Log.w(TAG, "news_notification_click track failed", it) }
+        // E17 notification_click：media_id 取自通知携带的 Intent（无片源 ID 时为 0，不填充其他 ID）；
+        // NOTIFY-BASE：pos_id/trigger_source 按来源推导；跨实例窗口去重由 TrackEvents 兜底。
+        val clickMediaId = intent.getIntExtra(EXTRA_MEDIA_ID, -1).coerceAtLeast(0)
+        val clickShowType = intent.getIntExtra(HintUtil.CO_SHOW_TYPE, -1)
+        val clickNotificationId = intent.getIntExtra(HintUtil.CO_NOTIFICATION_ID, -1)
+        val fromFcm = intent.getBooleanExtra(EXTRA_FROM_FCM, false)
+        val clickPosId = if (fromFcm) "fcm" else "news"
+        val clickTriggerSource = if (fromFcm) {
+            "fcm"
+        } else {
+            if (clickShowType == HintUtil.CO_S_TYPE_UNLOCK) "unlock" else "timer"
+        }
+        TrackEvents.notificationClick(
+            clickMediaId,
+            clickPosId,
+            clickTriggerSource,
+            clickShowType,
+            clickNotificationId,
+        )
     }
 
     /** 通知权限 → 继续启动流程（systemOnly：只弹系统框，弹不出来也不降级，不阻塞广告）。 */
@@ -234,6 +266,7 @@ class SplashActivity : ComponentActivity() {
                 SplashLoadingScreen(
                     holdMs = if (isHotStart) HOT_HOLD_MS else COLD_HOLD_MS,
                     onFinished = ::onSplashFinished,
+                    onShown = ::reportLoadingShown,
                 )
             }
         }
@@ -269,6 +302,14 @@ class SplashActivity : ComponentActivity() {
             awaitResumed()
             if (epoch != startupEpoch || !isActive || isFinishing || isDestroyed) return@launch
 
+            // E13 ad_show_timeout：等兜底超时后放行（无兜底广告仍继续启动流程）。
+            if (!AdScheduler.isReady(scene)) {
+                TrackEvents.adShowTimeout(
+                    AdTrackingHelper.AdType.OPEN,
+                    AdScheduler.coldSplashLocation().jsonKey,
+                    waited,
+                )
+            }
             val started = AdScheduler.emit(
                 location = AdScheduler.coldSplashLocation(),
                 activity = this@SplashActivity,
@@ -285,6 +326,12 @@ class SplashActivity : ComponentActivity() {
             if (!AdScheduler.canShowHotSplash()) {
                 // Frequency-blocked: keep the designed splash at least its
                 // minimum time, then return to the page underneath.
+                // E12 ad_blocked：hd_ad_interval 未满足。
+                TrackEvents.adBlocked(
+                    AdTrackingHelper.AdType.OPEN,
+                    AdLocation.SPLASH_HOT.jsonKey,
+                    "interval_not_met",
+                )
                 if (epoch == startupEpoch) requestExit()
                 return@launch
             }
@@ -310,7 +357,15 @@ class SplashActivity : ComponentActivity() {
                 delay(POLL_MS)
                 waited += POLL_MS
             }
-            if (epoch == startupEpoch) requestExit()
+            if (epoch == startupEpoch) {
+                // E13：热启动等兜底超时后放行。
+                TrackEvents.adShowTimeout(
+                    AdTrackingHelper.AdType.OPEN,
+                    AdLocation.SPLASH_HOT.jsonKey,
+                    waited,
+                )
+                requestExit()
+            }
         }
     }
 
@@ -337,7 +392,14 @@ class SplashActivity : ComponentActivity() {
         // 通知点击带影视 ID：开屏广告结束后进对应详情页并自动播放
         val mediaId = intent.getIntExtra(EXTRA_MEDIA_ID, -1)
         if (mediaId > 0) {
-            startActivity(DetailActivity.createIntent(this, mediaId, autoPlay = true))
+            startActivity(
+                DetailActivity.createIntent(
+                    this,
+                    mediaId,
+                    autoPlay = true,
+                    fromPosition = TrackEvents.FROM_NOTIFY,
+                ).putExtra(EXTRA_SESSION_SOURCE, "notification"),
+            )
             finish()
             return
         }
@@ -353,7 +415,13 @@ class SplashActivity : ComponentActivity() {
             finish()
             return
         }
-        startActivity(Intent(this, MainActivity::class.java))
+        startActivity(
+            Intent(this, MainActivity::class.java)
+                .putExtra(
+                    EXTRA_SESSION_SOURCE,
+                    if (isReturnToMain) "warm" else "cold",
+                ),
+        )
         finish()
     }
 
@@ -364,14 +432,17 @@ class SplashActivity : ComponentActivity() {
         const val EXTRA_FROM_FCM = "extra_from_fcm"
         const val EXTRA_MEDIA_ID = "extra_media_id"
 
+        /** 拉活来源（E19 reactivation_landing 的 source）：cold / warm / notification。 */
+        const val EXTRA_SESSION_SOURCE = "extra_session_source"
+
         private const val HOT_START_DISMISS_TIMEOUT_MS = 1_500L
         private const val HOT_START_DISMISS_POLL_MS = 50L
         private const val COLD_HOLD_MS = 1400L
         private const val HOT_HOLD_MS = 1_400L
-        private const val COLD_AD_WAIT_MS = 2_500L
-        private const val HOT_AD_WAIT_MS = 1_200L
+        private const val COLD_AD_WAIT_MS = 10_500L
+        private const val HOT_AD_WAIT_MS = 10_200L
         private const val POLL_MS = 100L
-        private const val WATCHDOG_MS = 8_000L
+        private const val WATCHDOG_MS = 12_000L
         private const val WATCHDOG_POLL_MS = 500L
 
         /** Set for the lifetime of the visible splash; HotStartManager reads it. */

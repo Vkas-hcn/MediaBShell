@@ -9,12 +9,16 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.hdvideoplay.media.R
 import com.hdvideoplay.media.ads.AdScenes
 import com.hdvideoplay.media.ads.AdScheduler
 import com.hdvideoplay.media.ads.NativeReturnPresenter
 import com.hdvideoplay.media.ads.PageDwellTracker
+import com.hdvideoplay.media.data.notice.HintUtil
+import com.hdvideoplay.media.track.TrackEvents
 import com.hdvideoplay.media.ui.player.PlayerActivity
+import com.hdvideoplay.media.ui.splash.SplashActivity
 import com.hdvideoplay.media.ui.theme.MediaTheme
 
 /**
@@ -34,9 +38,17 @@ class DetailActivity : ComponentActivity() {
     private fun mediaIdOf(i: Intent = intent): Int = i.getIntExtra(EXTRA_MEDIA_ID, -1)
     private fun episodeOf(i: Intent = intent): Int = i.getIntExtra(EXTRA_EPISODE, 0)
     private fun autoPlayOf(i: Intent = intent): Boolean = i.getBooleanExtra(EXTRA_AUTO_PLAY, false)
+    private fun fromPositionOf(i: Intent = intent): String? = i.getStringExtra(EXTRA_FROM_POSITION)
+    private fun moduleIdOf(i: Intent = intent): Int? =
+        i.getIntExtra(EXTRA_MODULE_ID, 0).takeIf { it > 0 }
+
+    /** E19 reactivation_landing：拉活落地详情页真正展示后只上报一次（旋转重建不重报）。 */
+    private var landingReported = false
+    private var createdFromSavedState = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        createdFromSavedState = savedInstanceState != null
         enableEdgeToEdge()
         // Load ≠ Show: enter Detail only preloads normal pools; show on return_ad.
         AdScheduler.preload(AdScenes.NORMAL_1)
@@ -51,6 +63,24 @@ class DetailActivity : ComponentActivity() {
         // Re-warm on visible (idempotent: cache hit / in-flight guarded in scheduler).
         AdScheduler.preload(AdScenes.NORMAL_1)
         AdScheduler.preload(AdScenes.NORMAL_2)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // E19：通知深链落详情页、页面真正可见时上报（不提前、不重复）。
+        if (!landingReported &&
+            !createdFromSavedState &&
+            intent.hasExtra(SplashActivity.EXTRA_SESSION_SOURCE)
+        ) {
+            landingReported = true
+            val source = intent.getStringExtra(SplashActivity.EXTRA_SESSION_SOURCE) ?: "notification"
+            val posId = when {
+                intent.hasExtra(HintUtil.CO_SHOW_TYPE) -> "news"
+                intent.getBooleanExtra(SplashActivity.EXTRA_FROM_FCM, false) -> "fcm"
+                else -> null
+            }
+            TrackEvents.reactivationLanding(source, "detail", posId)
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -72,10 +102,23 @@ class DetailActivity : ComponentActivity() {
                 // System / gesture back must share the Compose onBack hook (return_ad),
                 // otherwise default finish bypasses AdScheduler.show(RETURN_AD).
                 BackHandler { attemptReturnAdThenFinish() }
+                val fromPosition = fromPositionOf()
+                val detailViewModel: DetailViewModel = viewModel(
+                    key = "detail-$mediaId-$initialEpisode",
+                    factory = DetailViewModel.factory(
+                        mediaId = mediaId,
+                        initialEpisode = initialEpisode,
+                        trackDetailEvents = fromPosition != null,
+                        fromPosition = fromPosition,
+                        moduleId = moduleIdOf(),
+                        autoPlay = autoPlayOf(),
+                    ),
+                )
                 DetailScreen(
                     mediaId = mediaId,
                     initialEpisode = initialEpisode,
                     autoPlay = autoPlayOf(),
+                    viewModel = detailViewModel,
                     onBack = { attemptReturnAdThenFinish() },
                     onPlay = { playMediaId, episode, title, fullscreen, lineIndex ->
                         if (playMediaId <= 0) {
@@ -118,6 +161,7 @@ class DetailActivity : ComponentActivity() {
                                     mediaId = id,
                                     episode = 0,
                                     title = item.title,
+                                    fromPosition = TrackEvents.FROM_RECOMMEND,
                                 ),
                             )
                         }
@@ -150,6 +194,8 @@ class DetailActivity : ComponentActivity() {
         const val EXTRA_SEASON = "EXTRA_SEASON"
         const val EXTRA_EPISODE = "EXTRA_EPISODE"
         const val EXTRA_AUTO_PLAY = "EXTRA_AUTO_PLAY"
+        const val EXTRA_FROM_POSITION = "EXTRA_FROM_POSITION"
+        const val EXTRA_MODULE_ID = "EXTRA_MODULE_ID"
 
         fun createIntent(
             context: Context,
@@ -157,11 +203,15 @@ class DetailActivity : ComponentActivity() {
             season: Int? = null,
             episode: Int = 0,
             autoPlay: Boolean = false,
+            fromPosition: String? = null,
+            moduleId: Int? = null,
         ): Intent = Intent(context, DetailActivity::class.java).apply {
             putExtra(EXTRA_MEDIA_ID, mediaId)
             if (season != null) putExtra(EXTRA_SEASON, season)
             putExtra(EXTRA_EPISODE, episode)
             putExtra(EXTRA_AUTO_PLAY, autoPlay)
+            if (fromPosition != null) putExtra(EXTRA_FROM_POSITION, fromPosition)
+            if (moduleId != null) putExtra(EXTRA_MODULE_ID, moduleId)
         }
     }
 }

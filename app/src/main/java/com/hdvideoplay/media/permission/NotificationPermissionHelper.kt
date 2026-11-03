@@ -14,6 +14,8 @@ import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.hdvideoplay.media.startup.HotStartManager
+import com.hdvideoplay.media.track.NotificationPromptState
+import com.hdvideoplay.media.track.TrackEvents
 
 /**
  * 通知权限申请（对齐 HyperVideo NotificationPermissionHelper，去掉埋点）。
@@ -158,9 +160,24 @@ object NotificationPermissionHelper {
                     dialogWillShow = dialogWillShow,
                     elapsedSinceRequestMs = SystemClock.elapsedRealtime() - permissionRequestStartedAt,
                 )
+                if (granted) {
+                    // notification_agree：系统权限请求被同意；框确认弹出过才记一次「提示」，
+                    // 未弹出即授权（极端时序）时用落盘的首提状态。
+                    val isFirst = if (dialogShown) {
+                        NotificationPromptState.markPromptShown()
+                    } else {
+                        !NotificationPromptState.isFirstPromptDone()
+                    }
+                    TrackEvents.notificationAgree(isFirst)
+                } else if (dialogShown) {
+                    // 框确实弹出过（拒绝/返回键）→ 记为已提示，供后续 agree 的 is_first_prompt 判定。
+                    NotificationPromptState.markPromptShown()
+                }
                 onResult(granted, dialogShown)
             }
             permissionRequestStartedAt = SystemClock.elapsedRealtime()
+            // notification_permission_request：以实际发起权限请求为准，仅检测状态不上报。
+            TrackEvents.notificationPermissionRequest()
             permissionLauncher.launch(permissions)
         }
 
@@ -183,6 +200,9 @@ object NotificationPermissionHelper {
         private fun showInAppPermissionDialog(onFinished: (granted: Boolean) -> Unit) {
             val dialog = NotificationPermissionDialog(activity)
             var decided = false
+            // 自定义引导展示 = 应用主动发起授权申请；记录本次是否为首次提示。
+            TrackEvents.notificationPermissionRequest()
+            val isFirstPrompt = NotificationPromptState.markPromptShown()
 
             fun finishDenied() {
                 if (decided) return
@@ -195,6 +215,8 @@ object NotificationPermissionHelper {
                 decided = true
                 dialog.setOnDismissListener(null)
                 dialog.dismiss()
+                // notification_agree：同意自定义引导（不代表系统权限已授予，两种状态区分）。
+                TrackEvents.notificationAgree(isFirstPrompt)
                 pendingSettingsResult = { onFinished(hasNotificationPermission(activity)) }
                 // 去系统设置页不算离开后台，避免返回时被热启动判定拦去开屏
                 HotStartManager.ignoreNextBackgroundReturn("notification_permission_settings")

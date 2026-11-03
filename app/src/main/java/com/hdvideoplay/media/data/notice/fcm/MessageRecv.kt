@@ -4,6 +4,7 @@ import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.hdvideoplay.media.data.notice.NewsLogger
+import com.hdvideoplay.media.track.TrackEvents
 
 /**
  * FCM 入口（Topic [FCM_TOPIC]）。
@@ -21,6 +22,11 @@ class MessageRecv : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         val dataKeys = message.data.keys.sorted()
         val hasNotification = message.notification != null
+        // E15 notification_received：下发消息到达客户端（仅 bi；pos_id/msg_id 可空）。
+        TrackEvents.notificationReceived(
+            posId = message.data["type"],
+            msgId = message.messageId,
+        )
         NewsLogger.fcmMessageArrived(dataKeys, hasNotification)
         val data = LinkedHashMap<String, String>()
         message.data.forEach { (key, value) -> data[key] = value }

@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.SystemClock
 import android.util.Log
 import android.util.TypedValue
 import android.view.View
@@ -19,6 +20,7 @@ import com.google.android.gms.ads.nativead.MediaView
 import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.nativead.NativeAdView
 import com.hdvideoplay.media.R
+import com.hdvideoplay.media.track.AdTrackingHelper
 
 /**
  * Native display host — mid-card OR fullscreen shell by [NativePresentMode].
@@ -37,6 +39,10 @@ class AdActivity : ComponentActivity() {
     private var onDismiss: ((Boolean) -> Unit)? = null
     private var shown = false
     private var presentMode: NativePresentMode = NativePresentMode.MIDCARD
+    private var showStartedAtMs = -1L
+    private var closeReported = false
+    private var pendingEntry: CachedAd? = null
+    private var pendingLocation: AdLocation = AdLocation.RETURN_AD
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -48,6 +54,8 @@ class AdActivity : ComponentActivity() {
         }
         onDismiss = pending.onDismiss
         presentMode = pending.presentMode
+        pendingEntry = pending.entry
+        pendingLocation = pending.location
         val ad = pending.entry.payload as? NativeAd
         if (ad == null) {
             Log.w(TAG, "AdActivity payload not NativeAd")
@@ -64,6 +72,27 @@ class AdActivity : ComponentActivity() {
         applyStatusBarInsets()
         bindNative(ad)
         shown = true
+        showStartedAtMs = SystemClock.elapsedRealtime()
+        // 收入：真实曝光由 AdMob 触发 OnPaidEvent → BI/Firebase + Adjust（展示前挂载）。
+        val entry = pendingEntry
+        if (entry != null) {
+            ad.setOnPaidEventListener { adValue ->
+                AdTrackingHelper.trackAdImpressionRevenueMicros(
+                    this@AdActivity,
+                    adValue,
+                    AdTrack.adTypeOf(entry.format),
+                    pendingLocation.jsonKey,
+                    adId = entry.adId,
+                    adSource = AdTrack.adSourceOf(ad.responseInfo),
+                    sdkName = "AdMob",
+                )
+                AdTrackingHelper.trackAdRevenueAdjust(
+                    adValue,
+                    ad.responseInfo,
+                    entry.node.unitId,
+                )
+            }
+        }
         Log.i(
             TAG,
             "Native shown mode=$presentMode unit=${pending.entry.node.unitId} scene=${pending.entry.scene}",
@@ -216,6 +245,22 @@ class AdActivity : ComponentActivity() {
         dismissed = true
         val cb = onDismiss
         onDismiss = null
+        // 关闭：实际展示过才上报一次，展示时长 = 展示到关闭。
+        val entry = pendingEntry
+        if (!closeReported && shown && shownFlag && entry != null) {
+            closeReported = true
+            val stay = if (showStartedAtMs > 0) {
+                SystemClock.elapsedRealtime() - showStartedAtMs
+            } else {
+                0L
+            }
+            AdTrackingHelper.trackAdClose(
+                AdTrack.adTypeOf(entry.format),
+                pendingLocation.jsonKey,
+                entry.adId,
+                stay,
+            )
+        }
         Log.i(TAG, "settle mode=$presentMode shown=${shownFlag && shown} → scheduler callback")
         runCatching { cb?.invoke(shownFlag && shown) }
     }
@@ -235,12 +280,13 @@ class AdActivity : ComponentActivity() {
             entry: CachedAd,
             presentMode: NativePresentMode = NativePresentMode.MIDCARD,
             onDismiss: (shown: Boolean) -> Unit,
+            location: AdLocation = AdLocation.RETURN_AD,
         ): Boolean {
             if (activity.isFinishing) {
                 onDismiss(false)
                 return false
             }
-            AdDisplayBridge.offer(entry, presentMode, onDismiss)
+            AdDisplayBridge.offer(entry, presentMode, onDismiss, location)
             return runCatching {
                 activity.startActivity(Intent(activity, AdActivity::class.java))
                 Log.i(TAG, "AdActivity launch mode=$presentMode")

@@ -23,6 +23,7 @@ import com.hdvideoplay.media.MediaApp
 import com.hdvideoplay.media.R
 import com.hdvideoplay.media.data.notice.fcm.MessageRecv
 import com.hdvideoplay.media.startup.HotStartManager
+import com.hdvideoplay.media.track.TrackEvents
 import com.hdvideoplay.media.ui.splash.SplashActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -227,10 +228,13 @@ object HintUtil {
         val now = System.currentTimeMillis()
         if (!NewsGateRules.cooldownSatisfied(lastTime, now, cooldownMinutes)) {
             NewsLogger.sendBlocked(showType, "cooldown", detail = ",冷却分钟=" + cooldownMinutes + ",上次发送=" + lastTime)
+            // E18：通知被频控拦截未展示。
+            TrackEvents.notificationFrequencyLimited("news", "cooldown")
             return false
         }
         if (!NewsGateRules.dailyCountBelow(sent, limit)) {
             NewsLogger.sendBlocked(showType, "daily_limit", detail = ",今日已发=" + sent + "/" + limit)
+            TrackEvents.notificationFrequencyLimited("news", "daily_limit")
             return false
         }
 
@@ -242,6 +246,9 @@ object HintUtil {
             max(config.pop.quietStartHour, config.pop.quietEndHour),
             sent, limit,
         )
+        if (!allowed) {
+            TrackEvents.notificationFrequencyLimited("news", "quiet_hours")
+        }
         return allowed
     }
 
@@ -363,6 +370,12 @@ object HintUtil {
     private fun canPostNewsNotifications(): Boolean =
         coHavePermission() && NotificationManagerCompat.from(coIntance()).areNotificationsEnabled()
 
+    /** E14/E16/E17 的 trigger_source：解锁 → unlock；轮询/闹钟 → timer。 */
+    private fun triggerSourceOf(showType: Int): String = when (showType) {
+        CO_S_TYPE_UNLOCK -> "unlock"
+        else -> "timer"
+    }
+
     private fun isDeviceLocked(): Boolean =
         coIntance().getSystemService(KeyguardManager::class.java)?.isKeyguardLocked == true
 
@@ -375,12 +388,24 @@ object HintUtil {
         trackSent: Boolean = true,
         poster: NotificationPoster? = null,
     ) {
+        if (trackSent) {
+            // E14 notification_trigger：通知触发逻辑真正执行、准备生成通知（NOTIFY-BASE）。
+            // banner 会话刷新（重复调度）与进程重启恢复不重报，避免重复统计。
+            TrackEvents.notificationTrigger("news", triggerSourceOf(showType))
+        }
         val notification = createOnceNt(content, showType, notificationId, alert, sticky, poster)
-        getManager().notify(notificationId, notification)
+        val submitted = runCatching { getManager().notify(notificationId, notification) }.isSuccess
         val channelId = if (alert.silent) NEWS_SILENT_CHANNEL_ID else NEWS_CHANNEL_ID
         NewsLogger.notifySubmitted(showType, notificationId, channelId, sticky)
         if (trackSent) {
             runCatching { TrackSDK.track("news_notification_sent", null, TrackPolicy.IMMEDIATE) }
+            // notification_send：notify() 成功且权限/开关可用才算送达；
+            // 触发后因权限/系统限制未送达时，trigger 已上报、send 不上报。
+            if (submitted && canPostNewsNotifications()) {
+                TrackEvents.notificationSend()
+                // E16 notification_show：通知实际展示（含常驻）；刷新同 ID 不重复（trackSent 门控）。
+                TrackEvents.notificationShow("news", triggerSourceOf(showType))
+            }
         }
     }
 

@@ -12,6 +12,7 @@ import com.hdvideoplay.media.data.dto.MediaItemDto
 import com.hdvideoplay.media.data.dto.PagedResultsDto
 import com.hdvideoplay.media.data.dto.StreamEntryDto
 import com.hdvideoplay.media.data.dto.StreamingPlatformDto
+import com.hdvideoplay.media.track.TrackEvents
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -31,7 +32,7 @@ class MediaRepository(
      * here as well.
      */
     suspend fun homeData(language: String = "en"): Result<List<HomeModuleDto>> = try {
-        decodeList(api.homeData(language))
+        decodeList(timedApi("home") { api.homeData(language) })
     } catch (cancel: CancellationException) {
         throw cancel
     } catch (t: Throwable) {
@@ -39,16 +40,16 @@ class MediaRepository(
     }
 
     suspend fun homeStreamData(): Result<List<StreamEntryDto>> =
-        decodeList(api.homeStreamData())
+        decodeList(timedApi("home_stream") { api.homeStreamData() })
 
     suspend fun moduleData(id: Int, language: String = "en", page: Int = 1): Result<List<MediaItemDto>> =
-        decodeList(api.moduleData(id, language, page))
+        decodeList(timedApi("module") { api.moduleData(id, language, page) })
 
     suspend fun search(keyword: String, page: Int = 1): Result<PagedResultsDto> =
-        decodeObject(api.search(keyword = keyword, page = page), PagedResultsDto())
+        decodeObject(timedApi("search") { api.search(keyword = keyword, page = page) }, PagedResultsDto())
 
     suspend fun filterOptions(): Result<FilterOptionsDto> =
-        decodeObject(api.filterOptions(), FilterOptionsDto())
+        decodeObject(timedApi("filter") { api.filterOptions() }, FilterOptionsDto())
 
     suspend fun discover(
         category: Int = 1,
@@ -57,43 +58,66 @@ class MediaRepository(
         country: String? = null,
         page: Int = 1,
     ): Result<PagedResultsDto> = decodeObject(
-        api.discover(
-            category = category,
-            genre = genre,
-            releaseYear = releaseYear,
-            country = country,
-            page = page,
-        ),
+        timedApi("discover") {
+            api.discover(
+                category = category,
+                genre = genre,
+                releaseYear = releaseYear,
+                country = country,
+                page = page,
+            )
+        },
         PagedResultsDto(),
     )
 
     suspend fun streaming(): Result<List<StreamingPlatformDto>> =
-        decodeList(api.streaming())
+        decodeList(timedApi("streaming") { api.streaming() })
 
     suspend fun daily(dailyStyle: String = "2"): Result<List<MediaItemDto>> =
-        decodeList(api.daily(dailyStyle))
+        decodeList(timedApi("daily") { api.daily(dailyStyle) })
 
 
     suspend fun detail(mediaId: Int, language: String = "en"): Result<DetailResponseDto> =
-        decodeObject(api.detail(mediaId, language), DetailResponseDto())
+        decodeObject(timedApi("detail") { api.detail(mediaId, language) }, DetailResponseDto())
 
     suspend fun outsideLinks(
         mediaId: Int,
         episode: Int,
         language: String = "en",
     ): Result<OutsideLinksResponseDto> =
-        decodeObject(api.outsideLinks(mediaId, episode, language), OutsideLinksResponseDto())
+        decodeObject(
+            timedApi("outsideLinks") { api.outsideLinks(mediaId, episode, language) },
+            OutsideLinksResponseDto(),
+        )
 
     /**
      * Play report must never break the playback path.
      * Failures are swallowed into Result.failure for optional logging.
      */
     suspend fun playReport(body: PlayReportBody): Result<Unit> = try {
-        val result = api.playReport(body)
+        val result = timedApi("playReport") { api.playReport(body) }
         if (result.isSuccess) Result.success(Unit)
         else Result.failure(ApiException(result.code, result.msg))
     } catch (t: Throwable) {
         Result.failure(t)
+    }
+
+    /**
+     * api_error 业务层：HTTP 200 但 ApiResult.code!=1 时上报一次。
+     * HTTP 非 2xx / 网络异常由 NetworkModule 拦截器上报，此处不重复。
+     */
+    private suspend fun timedApi(apiName: String, call: suspend () -> ApiResult): ApiResult {
+        // currentTimeMillis：JVM 单测可用（SystemClock 在本地单测未 mock）。
+        val start = System.currentTimeMillis()
+        val result = call()
+        if (!result.isSuccess) {
+            TrackEvents.apiError(
+                api = apiName,
+                httpCode = 200,
+                costMs = System.currentTimeMillis() - start,
+            )
+        }
+        return result
     }
 
     private inline fun <reified T> decodeList(result: ApiResult): Result<List<T>> = try {

@@ -96,8 +96,10 @@ dependencies {
     implementation(libs.play.services.ads)
     implementation(libs.androidx.constraintlayout)
     implementation(libs.androidx.lifecycle.process)
-    implementation(platform(libs.firebase.bom))
+    // 不用 firebase BOM（strictly 约束会把 analytics/measurement 强升到 Kotlin 2.4 元数据版本，
+    // 与项目 Kotlin 2.0.21 编译不兼容）；messaging/analytics 均直接固定版本。
     implementation(libs.firebase.messaging)
+    implementation(libs.firebase.analytics)
 
     implementation("com.android.installreferrer:installreferrer:2.2")
     implementation("com.flux.tracksdk:tracksdk:3.0.3")

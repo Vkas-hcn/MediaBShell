@@ -3,6 +3,7 @@ package com.hdvideoplay.media.data.notice.fcm
 import com.hdvideoplay.media.data.notice.HintUtil
 import com.hdvideoplay.media.data.notice.NewsLogger
 import com.hdvideoplay.media.startup.HotStartManager
+import com.hdvideoplay.media.track.TrackEvents
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -64,11 +65,17 @@ internal object FcmNotificationDecision {
             return
         }
 
+        // E14 notification_trigger：FCM 触发逻辑真正执行、准备生成通知（NOTIFY-BASE）。
+        TrackEvents.notificationTrigger("fcm", "fcm")
         val shown = FcmNotificationPresenter.show(content = content, soundMode = soundMode)
         if (!shown) {
+            // 触发后因权限/系统限制未送达：trigger 已上报、send 不上报。
             NewsLogger.fcmSubmitFailed(content.id)
             return
         }
+        // notification_send：已成功提交给系统通知管理服务；E16 实际展示。
+        TrackEvents.notificationSend()
+        TrackEvents.notificationShow("fcm", "fcm")
         NewsLogger.fcmShown(content.id)
     }
 
