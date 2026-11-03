@@ -73,3 +73,33 @@
 - SplashActivity 增强：EXTRA_RETURN_TO_MAIN/EXTRA_FROM_FCM 常量与 createReturnToMainIntent/createHotStartIntent/createNotificationClickIntent 工厂；进程级 startupEpoch/processAlreadyEntered；onCreate：reportNotificationClickIfNeeded（CO_SHOW_TYPE→HintUtil.cancelNewsNotification；实例内一次 news_notification_click 埋点；EXTRA_FROM_FCM 也上报）+ 热启动且广告展示中→startupEpoch++→restartStartupAfterDismissingAd（50ms 轮询、1500ms 上限）；onNewIntent（setIntent+通知点击处理+EXTRA_HOT_START→离场中 relaunchGuideForHotStart/否则 epoch++ 收起广告重走）；冷/热广告流程加 epoch 代数守卫；doExit 落页分支（isUninstallEntry→UninstallRetentionActivity；intent.data→ACTION_VIEW 系统浏览器；isHotStart&&!isReturnToMain→finish；否则→MainActivity）；requestNotificationThenProceed 增加 isUninstallEntry 跳过。
 - 新增 ui/uninstall/UninstallEntry.kt（ACTION_DELETE_ENTRY=com.hd.videoplay.media.delete + EXTRA_UNINSTALL_ENTRY 判定）。
 - 验证：:app:assembleDebug + :app:testDebugUnitTest 通过；设备手测待阶段 5 收尾时一并走查。
+### 阶段 5（2026-11-03，完成）
+
+- 删除 Compose 简化版 Retention/Confirm 页面，改为 ComponentActivity + XML 照搬：UninstallRetentionActivity（insets 处理、返回/Keep watching/Fix/Speed up→MainActivity NEW_TASK|CLEAR_TASK、Still uninstalling→AdScheduler.show(RETURN_AD)→确认页、ad_container 保持 gone）、UninstallConfirmActivity（GradientTextView 品牌渐变、返回→finish、Not Now→MainActivity CLEAR_TASK、Uninstall→二次 RETURN_AD→应用详情设置页→finishAffinity、失败 Toast uninstall_settings_failed）。
+- 两处插屏保持只展示缓存/被拦截立即回调：AdScheduler.show 无缓存同步回调 false→AtomicBoolean 幂等→流程继续，不阻塞卸载路径。
+- GradientTextView（com.hdvideoplay.media.ui，继承 android.widget.TextView）。
+- UninstallEntryActivity 改中转：NEW_TASK|CLEAR_TASK 转 SplashActivity（action=com.hd.videoplay.media.delete + EXTRA_UNINSTALL_ENTRY=true）；启动页识别 isUninstallEntry→跳过权限→冷启动开屏→挽留页。
+- Manifest：挽留/确认页补 screenOrientation=portrait。
+- 测试：移植 UninstallFlowTest（UninstallEntry 判定部分）。
+- 全量回归：:app:assembleDebug + :app:testDebugUnitTest 通过。
+
+## 整改验收清单（对照复刻对接文档 §8.5）
+
+- [x] 通知：三类触发+Home/最近任务延迟防抖+门禁顺序+动态 ID 70_000+文案轮换与去重+闹钟自恢复+保活 Job
+- [x] 通知样式：双渠道+collapsed/collapsed_legacy/expanded/heads-up RemoteViews+深浅色+inter 字体（与 HyperVideo 布局/图标/色值一致）
+- [x] 频控：cooldown/daily/hour 三轴+跨天清零（NewsGateRules 原式，原版单测通过）
+- [x] FCM：data-only→1–2s 随机延迟→门禁（初始化/非前台/权限）→90001 fcm_news_channel_v1 共享样式→soundMode 静音（topic=news 为服务端对接参数）
+- [x] 热启动：300ms 防抖武装+CLEAR_TASK 拉起+SINGLE_TOP 回退+屏幕未点亮/已在启动页跳过+ignoreNextBackgroundReturn
+- [x] 热启动广告：启动页 SPLASH_HOT 路径（AdScheduler 零改动），广告结束落 MainActivity
+- [x] 通知权限：启动页每次实例 systemOnly+首页每次显示重试系统框+300ms 判定+二次拒绝自定义框（样式照搬）跳设置页+授权后 markLing
+- [x] 卸载挽留：快捷方式→中转→启动页分流（跳过权限）→开屏→挽留页（XML 照搬）→RETURN_AD→确认页（XML 照搬+品牌渐变）→二次 RETURN_AD→设置页→finishAffinity
+- [x] 下发配置：notice 节点解析落盘+DTO 默认值=用户 JSON+解析失败回退默认
+- [x] 全部提交编译通过+单测全绿+docs 计划文档同步
+
+## 设备验证待办（代码侧已完成，需真机回归）
+
+- 通知：真机投递（轮询/解锁/Home）、常驻 banner 会话（banner_on=1 时）、通知点击清栈落首页、划掉恢复。
+- 热启动：后台 300ms 后回前台清栈重走开屏；去通知设置页返回不重走开屏；屏幕未点亮跳过。
+- 权限：启动页系统框、首页连续两次拒绝后自定义框、Allow→设置页→返回 markLing。
+- 卸载挽留：长按图标→Uninstall→启动页→开屏→挽留页→确认页→设置页全链路（含两处 RETURN_AD 插屏）。
+- FCM：需推送端按 topic=news 发送 data-only 消息后验证 1–2s 延迟展示与点击落首页。

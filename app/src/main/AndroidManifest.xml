@@ -44,10 +44,12 @@
             android:exported="true" />
         <activity
             android:name=".ui.uninstall.UninstallRetentionActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:screenOrientation="portrait" />
         <activity
             android:name=".ui.uninstall.UninstallConfirmActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:screenOrientation="portrait" />
 
         <!-- 通知/拉活/保活（无前台服务载体，保活=闹钟自恢复） -->
         <service

@@ -1,81 +1,98 @@
 package com.hdvideoplay.media.ui.uninstall
 
 import android.content.Intent
+import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
+import android.view.View
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
+import androidx.activity.addCallback
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.core.view.updatePadding
+import com.hdvideoplay.media.MainActivity
 import com.hdvideoplay.media.R
 import com.hdvideoplay.media.ads.AdLocation
 import com.hdvideoplay.media.ads.AdScheduler
-import com.hdvideoplay.media.ui.theme.MediaTheme
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.roundToInt
 
+/** 卸载挽留第 1 步：问题卡 + Keep watching / Still uninstalling（UI 照搬 HyperVideo）。 */
 class UninstallRetentionActivity : ComponentActivity() {
+
+    private val navigating = AtomicBoolean(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-        setContent {
-            MediaTheme {
-                RetentionPage(
-                    onKeep = ::finish,
-                    onContinue = ::showExistingAdThenConfirm,
-                )
+        applyEdgeToEdge()
+        setContentView(R.layout.activity_uninstall_retention)
+        applyInsets()
+
+        onBackPressedDispatcher.addCallback(this) { goMain() }
+        findViewById<View>(R.id.uninstall_back).setOnClickListener { goMain() }
+        findViewById<View>(R.id.uninstall_keep).setOnClickListener { goMain() }
+        findViewById<View>(R.id.uninstall_fix).setOnClickListener { goMain() }
+        findViewById<View>(R.id.uninstall_speed).setOnClickListener { goMain() }
+        findViewById<View>(R.id.uninstall_still).setOnClickListener { startConfirmAfterCachedAd() }
+    }
+
+    /** 有缓存广告先展示（现有 RETURN_AD 池）；无缓存/失败立即进确认页。 */
+    private fun startConfirmAfterCachedAd() {
+        if (!navigating.compareAndSet(false, true)) return
+        val done = AtomicBoolean(false)
+        val proceed = Runnable {
+            if (done.compareAndSet(false, true)) {
+                navigating.set(false)
+                if (!isFinishing && !isDestroyed) {
+                    startActivity(Intent(this, UninstallConfirmActivity::class.java))
+                }
             }
+        }
+        val started = AdScheduler.show(AdLocation.RETURN_AD, this) { proceed.run() }
+        if (!started) proceed.run()
+    }
+
+    private fun goMain() {
+        if (isFinishing || isDestroyed) return
+        startActivity(
+            Intent(this, MainActivity::class.java).addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK,
+            ),
+        )
+        finish()
+    }
+
+    private fun applyEdgeToEdge() {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        @Suppress("DEPRECATION")
+        window.statusBarColor = Color.TRANSPARENT
+        @Suppress("DEPRECATION")
+        window.navigationBarColor = Color.TRANSPARENT
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
+        }
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
         }
     }
 
-    private fun showExistingAdThenConfirm() {
-        val completed = AtomicBoolean(false)
-        val proceed = {
-            if (completed.compareAndSet(false, true) && !isFinishing && !isDestroyed) {
-                startActivity(Intent(this, UninstallConfirmActivity::class.java))
+    private fun applyInsets() {
+        val root = findViewById<View>(R.id.uninstall_root)
+        val header = findViewById<View>(R.id.uninstall_header)
+        val actions = findViewById<View>(R.id.uninstall_actions)
+        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            header.updatePadding(top = bars.top)
+            header.layoutParams = header.layoutParams.apply {
+                height = bars.top + dp(64)
             }
+            actions.updatePadding(bottom = bars.bottom + dp(24))
+            insets
         }
-        // Reuses the already-defined return-ad API and inventory; never loads or
-        // presents the excluded guide_1/guide_2 placements.
-        AdScheduler.show(AdLocation.RETURN_AD, this) { proceed() }
     }
-}
 
-@Composable
-private fun RetentionPage(onKeep: () -> Unit, onContinue: () -> Unit) {
-    Column(
-        modifier = Modifier.fillMaxSize().padding(28.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text("Feedback", style = MaterialTheme.typography.titleLarge)
-        Text(
-            text = "Problems during use",
-            modifier = Modifier.padding(top = 30.dp),
-            style = MaterialTheme.typography.headlineSmall,
-        )
-        Text(
-            text = "Improve your experience",
-            modifier = Modifier.padding(top = 8.dp, bottom = 28.dp),
-            style = MaterialTheme.typography.bodyLarge,
-        )
-        Text("Video playback issue                         Fix")
-        Text("Video loading is slow                 Speed up", modifier = Modifier.padding(top = 14.dp))
-        Button(onClick = onKeep, modifier = Modifier.padding(top = 36.dp)) {
-            Text("Keep watching")
-        }
-        OutlinedButton(onClick = onContinue, modifier = Modifier.padding(top = 8.dp)) {
-            Text("Still uninstalling")
-        }
-    }
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).roundToInt()
 }
