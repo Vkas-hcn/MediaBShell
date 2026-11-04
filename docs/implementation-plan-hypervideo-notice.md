@@ -128,3 +128,16 @@
 - 内容选取（提交 88272dd）：NotificationContentRepository 优先级改为 远端 news_list（按序轮换）> home_data 随机池 > 静态兜底；media_id<=0 条目走随机池；单条列表允许连续重复（受频控约束）、多条轮换天然去重；标题/简介/海报任一缺失时按 media_id 调 detail 接口补全（5s 超时、异常兜住），补全后仍无标题回退随机池，仅缺海报→固定图标兜底；action 空默认 Play now。
 - 零改动：DispatchManager、HintUtil、PosterFetcher、ViewBinder、SplashActivity 点击落页（EXTRA_MEDIA_ID→详情页自动播放）、FCM 链路。
 - 验证：:app:assembleDebug + :app:testDebugUnitTest 通过（86 用例 0 失败；测试目录按仓库 .gitignore 约定不提交）。设备待办：服务端下发 news_list 后验证轮换展示、海报补全与点击落详情播放。
+### news_list 生效问题修复（2026-11-04，提交 db914f4）
+
+现象：本地 hd_config.json 修改 news_list 后，通知仍展示随机电影（旧逻辑）。
+
+原因：
+1. DispatchManager 启动时用缓存的 dispatch payload、以及拉取成功时用远端 notice 覆盖落盘（NoticeConfigStore 整体覆盖）；远端 payload 无 news_list → DTO 默认空列表 → 本地列表被清空。
+2. 远端列表轮换游标只在进程内存，进程重启归零 → 每次冷启动第一条永远是列表首项（若首项 media_id=0 则随机电影）。
+
+修复：
+- NoticeConfigStore.save 增加 mergeNewsList：下发/缓存未携带 news_list（空列表）时保留已生效列表；非空列表仍以远端为准（远端可覆盖，但暂时无法用空列表清空，需显式清空能力时再加字段）。
+- NotificationContentRepository 轮换游标持久化到 notification_copy_rotation/remote_index（跨进程累计；列表变更时按新长度取模对齐）。
+
+注意：按已确认口径，media_id=0 的条目会忽略下发文案与封面、随机选片；要展示指定文案/封面必须填 media_id（poster_url 可省，缺省时按 media_id 查详情补全）。
