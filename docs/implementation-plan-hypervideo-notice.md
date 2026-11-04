@@ -120,3 +120,11 @@
 - 收拢时机：冷/热流程检测到广告就绪 → completeProgressSoon()（收拢到此刻 + 150ms 展示缓冲，覆盖 awaitResumed/emit 间隙）；热启动被频控拦截 → completeProgressNow()（立即走满与跳转同步）；等待窗口超时退出 → 无需处理（进度条天然在窗口终点走满）。
 - 保留原有语义：hold 最短停留（1400ms）后触发 onHoldElapsed（原 onSplashFinished）启动广告流程；loading_show 埋点、E12/E13 埋点、重启流程（restartStartupFlow 重置 startedAt 与目标）均不受影响。
 - 验证：:app:assembleDebug + :app:testDebugUnitTest 通过；设备待办：观察冷启动（最长约 11.9s）与热启动（最长约 11.6s）进度条是否在广告弹出/跳转瞬间走满。
+## 扩展：notice.news_list 远端下发（2026-11-04，方案已确认）
+
+需求：notice 节点新增内容列表 news_list（[{media_id, title, overview, poster_url, action}]），实现通知文案、电影跳转、电影封面的动态下发；media_id 未填随机选片（现有随机池）；media_id 有、poster_url 无则按 media_id 查详情补海报。
+
+- 模型（提交 02bffac）：NoticeNewsItem DTO + NoticeConfig.newsList；本地 hd_config.json notice 增加 news_list: []（空=现有行为）；服务端下发经既有链路（DispatchManager→NoticeConfigStore 整体覆盖）自动生效。
+- 内容选取（提交 88272dd）：NotificationContentRepository 优先级改为 远端 news_list（按序轮换）> home_data 随机池 > 静态兜底；media_id<=0 条目走随机池；单条列表允许连续重复（受频控约束）、多条轮换天然去重；标题/简介/海报任一缺失时按 media_id 调 detail 接口补全（5s 超时、异常兜住），补全后仍无标题回退随机池，仅缺海报→固定图标兜底；action 空默认 Play now。
+- 零改动：DispatchManager、HintUtil、PosterFetcher、ViewBinder、SplashActivity 点击落页（EXTRA_MEDIA_ID→详情页自动播放）、FCM 链路。
+- 验证：:app:assembleDebug + :app:testDebugUnitTest 通过（86 用例 0 失败；测试目录按仓库 .gitignore 约定不提交）。设备待办：服务端下发 news_list 后验证轮换展示、海报补全与点击落详情播放。
