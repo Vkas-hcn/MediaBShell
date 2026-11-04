@@ -18,17 +18,46 @@ import java.util.concurrent.atomic.AtomicReference
  * carries the headers returned by outside/links.
  */
 object MediaCdnHeaders {
-    private val current = AtomicReference<Map<String, String>>(emptyMap())
+    /**
+     * [default] = 当前播放源（视频）的请求头；[byUrl] = 按 URL 精确匹配的请求头（如字幕
+     * request_headers）。拦截器优先命中 byUrl，否则回落 default；HLS 分片/重定向回落 default。
+     */
+    data class Snapshot(
+        val default: Map<String, String> = emptyMap(),
+        val byUrl: Map<String, Map<String, String>> = emptyMap(),
+    )
+
+    private val current = AtomicReference(Snapshot())
 
     fun set(headers: Map<String, String>) {
-        current.set(LinkedHashMap(headers))
+        val prev = current.get()
+        current.set(Snapshot(default = LinkedHashMap(headers), byUrl = prev.byUrl))
+    }
+
+    fun setByUrl(byUrl: Map<String, Map<String, String>>) {
+        val prev = current.get()
+        current.set(Snapshot(default = prev.default, byUrl = copyByUrl(byUrl)))
+    }
+
+    /** 原子设置视频默认 headers 与 URL 专属 headers，避免读到半更新状态。 */
+    fun set(default: Map<String, String>, byUrl: Map<String, Map<String, String>>) {
+        current.set(Snapshot(default = LinkedHashMap(default), byUrl = copyByUrl(byUrl)))
     }
 
     fun clear() {
-        current.set(emptyMap())
+        current.set(Snapshot())
     }
 
-    fun snapshot(): Map<String, String> = current.get()
+    fun snapshot(): Map<String, String> = current.get().default
+
+    /** 命中 URL 专属 headers（如字幕），否则回落到视频默认 headers。 */
+    fun headersFor(url: String): Map<String, String> {
+        val s = current.get()
+        return s.byUrl[url] ?: s.default
+    }
+
+    private fun copyByUrl(byUrl: Map<String, Map<String, String>>): Map<String, Map<String, String>> =
+        byUrl.mapValues { (_, v) -> LinkedHashMap(v) }
 }
 
 object NetworkModule {
@@ -94,7 +123,7 @@ object NetworkModule {
      */
     private val cdnHeadersInterceptor = Interceptor { chain ->
         val original = chain.request()
-        val headers = MediaCdnHeaders.snapshot()
+        val headers = MediaCdnHeaders.headersFor(original.url.toString())
         val request = if (headers.isEmpty()) {
             original
         } else {

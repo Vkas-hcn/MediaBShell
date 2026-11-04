@@ -11,15 +11,14 @@ import android.util.Log
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
-import com.hdvideoplay.media.MainActivity
 import com.hdvideoplay.media.ads.AdScheduler
 import com.hdvideoplay.media.ui.splash.SplashActivity
 import java.lang.ref.WeakReference
 
 /**
  * 热启动判定（对齐 HyperVideo HyperVideoApplication 的启动广告判定）：
- * - 退后台 300ms 防抖后武装；回前台清栈重拉启动页（CLEAR_TASK），广告结束落首页；
- * - CLEAR_TASK 失败回退普通热启动（SINGLE_TOP，广告结束回原页面）；
+ * - 退后台 300ms 防抖后武装；回前台覆盖式打开启动页（SINGLE_TOP，不清栈），广告结束回原页面；
+ * - 原页面不再在退后台时被 finish，保持页面栈；
  * - 去系统设置页（ignoreNextBackgroundReturn）不算真正离开后台；
  * - 广告加载/展示仍走现有 AdScheduler（SPLASH_HOT），本对象不直接展示广告。
  */
@@ -39,7 +38,6 @@ object HotStartManager : DefaultLifecycleObserver, Application.ActivityLifecycle
     private var pendingHotStartRelaunch: Runnable? = null
     private var ignoreNextBackgroundReturn = false
 
-    private val contentActivities = LinkedHashSet<Activity>()
     private var topActivity: WeakReference<Activity>? = null
     private var adActivity: WeakReference<Activity>? = null
 
@@ -96,7 +94,6 @@ object HotStartManager : DefaultLifecycleObserver, Application.ActivityLifecycle
             pendingArmRunnable = null
             if (processInForeground) return@Runnable
             hotStartArmed = true
-            finishNonWhitelisted()
             Log.d(TAG, "启动广告判定=热启动已武装 防抖毫秒=$HOT_START_DEBOUNCE_MS")
         }.also { mainHandler.postDelayed(it, HOT_START_DEBOUNCE_MS) }
     }
@@ -106,24 +103,7 @@ object HotStartManager : DefaultLifecycleObserver, Application.ActivityLifecycle
         pendingArmRunnable = null
     }
 
-    /** 回前台重置：结束启动链以外的页面（白名单：MainActivity、SplashActivity）。 */
-    private fun finishNonWhitelisted() {
-        contentActivities.toList().forEach { activity ->
-            if (activity.isFinishing || activity.isDestroyed || activity.isChangingConfigurations) {
-                return@forEach
-            }
-            if (activity is MainActivity || activity is SplashActivity) {
-                return@forEach
-            }
-            runCatching { activity.finish() }
-                .onSuccess { Log.d(TAG, "回前台重置：结束页面=" + activity.javaClass.simpleName) }
-                .onFailure { error ->
-                    Log.w(TAG, "回前台重置：结束页面失败 " + activity.javaClass.simpleName, error)
-                }
-        }
-    }
-
-    /** 回前台清栈重置：CLEAR_TASK 打开启动页，广告结束落首页。 */
+    /** 回前台覆盖式打开启动页：压在当前页面之上，广告结束 finish 回原页面（不清栈）。 */
     private fun launchReturnToGuide() {
         // 屏幕未点亮不重开屏
         val power = app.getSystemService(PowerManager::class.java)
@@ -133,17 +113,11 @@ object HotStartManager : DefaultLifecycleObserver, Application.ActivityLifecycle
         }
         val current = topActivity?.get()
             ?.takeIf { !it.isFinishing && !it.isDestroyed }
-        if (current is SplashActivity) {
+        if (current is SplashActivity || SplashActivity.isShowing) {
             Log.d(TAG, "热启动跳过 原因=当前已是启动页")
             return
         }
-        runCatching {
-            app.startActivity(SplashActivity.createReturnToMainIntent(app))
-            Log.d(TAG, "回前台重置：CLEAR_TASK 打开启动页")
-        }.onFailure { error ->
-            Log.w(TAG, "回前台重置启动失败，回退普通热启动", error)
-            launchPlainHotStart()
-        }
+        launchPlainHotStart()
     }
 
     /** 普通热启动（回退路径）：仅 SINGLE_TOP 压栈，广告结束后回原页面。 */
@@ -166,7 +140,7 @@ object HotStartManager : DefaultLifecycleObserver, Application.ActivityLifecycle
      */
     fun relaunchGuideForHotStart(source: Intent) {
         val intent = Intent(source).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
         pendingHotStartRelaunch?.let(mainHandler::removeCallbacks)
         val runnable = Runnable {
@@ -212,7 +186,6 @@ object HotStartManager : DefaultLifecycleObserver, Application.ActivityLifecycle
     override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
 
     override fun onActivityDestroyed(activity: Activity) {
-        contentActivities.remove(activity)
         if (topActivity?.get() === activity) topActivity = null
         if (adActivity?.get() === activity) adActivity = null
     }
@@ -222,7 +195,6 @@ object HotStartManager : DefaultLifecycleObserver, Application.ActivityLifecycle
             adActivity = WeakReference(activity)
         } else {
             topActivity = WeakReference(activity)
-            contentActivities.add(activity)
         }
     }
 

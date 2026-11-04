@@ -515,14 +515,6 @@ class SplashActivity : ComponentActivity() {
                 putExtra(EXTRA_HOT_START, true)
             }
 
-        /** 回前台清栈重置（NEW_TASK|CLEAR_TASK），广告结束后落首页 MainActivity。 */
-        fun createReturnToMainIntent(context: Context): Intent =
-            Intent(context, SplashActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                putExtra(EXTRA_HOT_START, true)
-                putExtra(EXTRA_RETURN_TO_MAIN, true)
-            }
-
         /** 进程级启动流程代数：新实例/热启动递增，旧广告回调按代数丢弃。 */
         @Volatile
         private var startupEpoch = 0

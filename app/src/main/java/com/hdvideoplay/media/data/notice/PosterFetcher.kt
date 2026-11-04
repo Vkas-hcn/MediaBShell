@@ -1,8 +1,10 @@
 package com.hdvideoplay.media.data.notice
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Log
+import com.hdvideoplay.media.R
 import com.hdvideoplay.media.data.api.NetworkModule
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -64,4 +66,33 @@ object PosterFetcher {
             BitmapFactory.Options().apply { inSampleSize = sample },
         )
     }.onFailure { Log.w(TAG, "poster decode failed", it) }.getOrNull()
+
+    private var fallback: NotificationPoster? = null
+
+    /** 本地内置保底海报（封面下载/解码失败时使用），进程内缓存。 */
+    suspend fun loadFallback(context: Context): NotificationPoster? {
+        fallback?.let { return it }
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val res = context.resources
+                val small = decodeResource(res, R.drawable.ic_def, SMALL_PX)
+                    ?: return@runCatching null
+                val large = decodeResource(res, R.drawable.ic_def, LARGE_PX)
+                    ?: return@runCatching null
+                NotificationPoster(small, large).also { fallback = it }
+            }.onFailure { Log.w(TAG, "fallback poster decode failed", it) }.getOrNull()
+        }
+    }
+
+    private fun decodeResource(
+        res: android.content.res.Resources,
+        resId: Int,
+        targetPx: Int,
+    ): Bitmap? = runCatching {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeResource(res, resId, bounds)
+        var sample = 1
+        while (bounds.outWidth / (sample * 2) >= targetPx) sample *= 2
+        BitmapFactory.decodeResource(res, resId, BitmapFactory.Options().apply { inSampleSize = sample })
+    }.onFailure { Log.w(TAG, "fallback decode failed", it) }.getOrNull()
 }

@@ -57,6 +57,9 @@ object NewsLogger {
 
     fun contentMissing() = w("【通知】无可用通知内容,本次跳过")
 
+    fun posterFallback(id: String) =
+        w("【通知】封面核验失败,使用本地保底海报,文案ID=" + id)
+
     fun notifySubmitted(source: Int, id: Int, channel: String, sticky: Boolean) =
         i(
             "【通知·" + sourceName(source) + "】已提交,通知ID=" + id + ",渠道=" + channel +

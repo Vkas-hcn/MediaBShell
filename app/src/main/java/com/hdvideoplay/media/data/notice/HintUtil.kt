@@ -145,6 +145,7 @@ object HintUtil {
     fun restorePersistentBannerIfActive(notificationId: Int, showType: Int) {
         val session = bannerSessions.snapshot()?.takeIf { it.notificationId == notificationId } ?: return
         if (isDeviceLocked() || !canPostNewsNotifications()) return
+        if (HotStartManager.isAppForeground()) return
         sendStandardNotification(
             session.content,
             showType,
@@ -291,13 +292,19 @@ object HintUtil {
             return
         }
         val notificationId = nextNotificationId()
-        // 影视封面：下载失败/超时返回 null，通知图回退固定图标
+        // 封面核验：下载 + 解码成功才算通过；失败用本地保底海报，并且点击只进首页。
         val poster = PosterFetcher.load(content)
+        val posterVerified = poster != null
+        val displayPoster = poster ?: PosterFetcher.loadFallback(coIntance())
+        val effectiveContent = if (posterVerified) content else content.copy(mediaId = 0, url = "")
+        if (!posterVerified) {
+            NewsLogger.posterFallback(content.id)
+        }
         if (bannerConfig.enabled == 1 && bannerConfig.durationSeconds > 0 && !isDeviceLocked()) {
             sendPersistentNotification(
-                content, showType, notificationId,
+                effectiveContent, showType, notificationId,
                 bannerConfig.durationSeconds, bannerConfig.ringEnabled == 1,
-                poster,
+                displayPoster,
             )
         } else {
             if (bannerConfig.enabled == 1 && bannerConfig.durationSeconds > 0) {
@@ -305,7 +312,7 @@ object HintUtil {
             } else {
                 NewsLogger.bannerSkipped("banner_disabled")
             }
-            sendStandardNotification(content, showType, notificationId, poster = poster, sticky = true)
+            sendStandardNotification(effectiveContent, showType, notificationId, poster = displayPoster, sticky = true)
             recordSent(showType)
         }
     }
@@ -357,6 +364,10 @@ object HintUtil {
                 }
                 if (!canPostNewsNotifications()) {
                     NewsLogger.bannerInterrupted("permission_or_switch_changed")
+                    break
+                }
+                if (HotStartManager.isAppForeground()) {
+                    NewsLogger.bannerInterrupted("app_foreground")
                     break
                 }
             }

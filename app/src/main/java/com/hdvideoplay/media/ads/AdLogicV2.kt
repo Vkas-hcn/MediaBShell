@@ -343,6 +343,37 @@ object AdLogicV2 {
         )
     }
 
+    /**
+     * 拖动松手后的「广告准备」：只标记新边界 + 预加载成对广告，不展示。
+     * 返回 true 表示命中新的 10min 节点，调用方开始 5 秒倒计时，倒计时结束再调 [showSeekAd]。
+     */
+    fun prepareSeekAd(fromMs: Long, toMs: Long): Boolean {
+        if (toMs <= fromMs) return false
+        if (isInColdQuietWindow()) return false
+        val crossed = crossedBoundaries(fromMs, toMs, PROGRESS_BOUNDARY_MS)
+        if (crossed.isEmpty()) return false
+        crossed.forEach { firedProgressBoundaries.add(it) }
+        Log.i(TAG, "seek countdown crossed=" + crossed + " from=" + fromMs + " to=" + toMs)
+        AdLogger.seekForwardBoundaries(fromMs, toMs, crossed)
+        // 倒计时期间先把成对广告库存拉起来，倒计时结束直接展示。
+        AdScheduler.preload(AdScenes.NORMAL_1)
+        AdScheduler.preload(AdScenes.NORMAL_2)
+        return true
+    }
+
+    /** 倒计时结束后展示成对广告；无库存 / activity 失效时静默返回 false。 */
+    fun showSeekAd(
+        activity: Activity?,
+        onComplete: (shownPair: Boolean) -> Unit = {},
+    ): Boolean {
+        Log.i(TAG, "seek countdown finished → show paired")
+        return emitPairedInterstitialFeel(
+            activity = activity,
+            reason = PairReason.PROGRESS_BOUNDARY,
+            onComplete = onComplete,
+        )
+    }
+
     // --- 成对 interstitial-feel (fullscreen → midcard) ---
 
     enum class PairReason(val logKey: String) {

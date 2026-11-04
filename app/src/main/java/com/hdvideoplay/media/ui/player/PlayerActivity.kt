@@ -6,6 +6,8 @@ import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -13,6 +15,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.compose.BackHandler
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.horizontalScroll
@@ -44,6 +47,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,6 +63,7 @@ import com.hdvideoplay.media.util.PosterUtils
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -95,6 +100,7 @@ import com.hdvideoplay.media.data.dto.PlaySourceDto
 import com.hdvideoplay.media.track.PlaySessionTracker
 import com.hdvideoplay.media.track.TrackEvents
 import com.hdvideoplay.media.util.CdnRequestHeaders
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import com.hdvideoplay.media.data.dto.SubtitleDto
 import com.hdvideoplay.media.ui.components.ErrorBox
 import com.hdvideoplay.media.ui.components.UiState
@@ -677,6 +683,8 @@ private fun PlayerContent(
     var scrubPositionMs by remember { mutableLongStateOf(0L) }
     var scrubStartMs by remember { mutableLongStateOf(0L) }
     var scrubWasPlaying by remember { mutableStateOf(false) }
+    var adCountdown by remember { mutableIntStateOf(0) }   // 0=关闭，5..1=倒计时中
+    var adCountdownToken by remember { mutableLongStateOf(0L) }
     var subtitleOn by remember { mutableStateOf(false) }
     var hasTextTracks by remember { mutableStateOf(false) }
     var locked by remember { mutableStateOf(false) }
@@ -798,15 +806,49 @@ private fun PlayerContent(
         }
     }
 
-    // Activity onStop → force upsert current progress.
+    // 退后台暂停（避免后台/广告期间出声）；回前台若之前在播放则延迟恢复（热启动启动页先覆盖）。
+    val resumeHandler = remember { Handler(Looper.getMainLooper()) }
+    var shouldResume by remember { mutableStateOf(false) }
+    var pendingResume by remember { mutableStateOf<Runnable?>(null) }
+
+    // Activity onStop → force upsert current progress + pause; onStart → resume.
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) {
-                writeWatchHistory(force = true)
+            when (event) {
+                Lifecycle.Event.ON_STOP -> {
+                    writeWatchHistory(force = true)
+                    pendingResume?.let(resumeHandler::removeCallbacks)
+                    pendingResume = null
+                    if (player.playWhenReady) {
+                        shouldResume = true
+                        player.pause()
+                    }
+                }
+                Lifecycle.Event.ON_START -> {
+                    if (shouldResume) {
+                        pendingResume?.let(resumeHandler::removeCallbacks)
+                        val runnable = Runnable {
+                            pendingResume = null
+                            if (shouldResume &&
+                                lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+                            ) {
+                                shouldResume = false
+                                player.play()
+                            }
+                        }
+                        pendingResume = runnable
+                        resumeHandler.postDelayed(runnable, RESUME_SETTLE_MS)
+                    }
+                }
+                else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        onDispose {
+            resumeHandler.removeCallbacksAndMessages(null)
+            pendingResume = null
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
     }
 
     // Initial upsert: STATE_READY once, or playing with position ≥ 5s.
@@ -851,11 +893,27 @@ private fun PlayerContent(
         }
     }
 
-    // headersKey: switching sources with different CDN headers always re-prepares.
-    val headersKey = source?.headers?.entries
-        ?.sortedBy { it.key.lowercase() }
-        ?.joinToString("|") { "${it.key.lowercase()}=${it.value}" }
-        .orEmpty()
+    // headersKey: switching sources with different CDN / subtitle headers always re-prepares.
+    val headersKey = buildString {
+        val src = source
+        if (src != null) {
+            append(
+                src.headers?.entries
+                    ?.sortedBy { it.key.lowercase() }
+                    ?.joinToString("|") { "${it.key.lowercase()}=${it.value}" }
+                    .orEmpty(),
+            )
+            append("||")
+            append(
+                src.subtitles.joinToString("|") { sub ->
+                    sub.actualUrl + "=" + sub.requestHeaders?.entries
+                        ?.sortedBy { it.key.lowercase() }
+                        ?.joinToString(",") { "${it.key.lowercase()}=${it.value}" }
+                        .orEmpty()
+                },
+            )
+        }
+    }
     LaunchedEffect(ready.lineIndex, ready.sourceIndex, source?.url, headersKey) {
         val lineName = ready.currentLine?.name?.takeIf { it.isNotBlank() }
             ?: "Line ${ready.lineIndex + 1}"
@@ -971,9 +1029,22 @@ private fun PlayerContent(
         if (scrubWasPlaying) player.play()
         writeWatchHistory(force = false, posMs = toMs, durMs = dur)
         tracker.onSeeked(toMs, dur)
-        if (toMs > fromMs) {
-            AdLogicV2.onSeekCommitted(fromMs, toMs, context as? android.app.Activity)
+        // 命中新的 10min 节点：先倒计时 5 秒，倒计时结束再弹广告。
+        if (toMs > fromMs && AdLogicV2.prepareSeekAd(fromMs, toMs)) {
+            adCountdownToken++
+            adCountdown = AD_COUNTDOWN_SECONDS
         }
+    }
+
+    // 拖动命中广告节点后的 5 秒倒计时：token 变化会取消旧协程并重新从 5 开始。
+    LaunchedEffect(adCountdownToken) {
+        if (adCountdownToken == 0L) return@LaunchedEffect
+        for (i in AD_COUNTDOWN_SECONDS downTo 1) {
+            adCountdown = i
+            delay(1_000L)
+        }
+        adCountdown = 0
+        AdLogicV2.showSeekAd(context as? android.app.Activity)
     }
 
     val autoLabel = source?.quality?.takeIf { it.isNotBlank() }
@@ -1052,7 +1123,7 @@ private fun PlayerContent(
                     episodeNumbers = episodeNumbers,
                     selectedEpisode = currentEpisode,
                     subtitleText = null,
-                    isScrubbing = isScrubbing,
+                    isScrubbing = isScrubbing || adCountdown > 0,
                 ),
                 onBack = onBack,
                 onTogglePlay = {
@@ -1109,6 +1180,16 @@ private fun PlayerContent(
                     durationMs = durationMs,
                     forward = scrubPositionMs >= scrubStartMs,
                     modifier = Modifier.align(Alignment.Center),
+                )
+            }
+
+            // 拖动命中广告节点：5 秒倒计时胶囊（靠视频上方，加载圈复用原有圆形进度条）。
+            if (adCountdown > 0) {
+                AdCountdownOverlay(
+                    seconds = adCountdown,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 72.dp),
                 )
             }
             // V9 design: Settings opens bottom Source/Quality panel (scrim + surface).
@@ -1281,12 +1362,15 @@ private fun playSource(player: ExoPlayer, source: PlaySourceDto) {
     // Prior bug: UA was continue'd out of the map and only set via setUserAgent — CDN 403/429.
     val headers = CdnRequestHeaders.build(source.headers)
     val userAgent = CdnRequestHeaders.userAgentOf(headers)
+    // 字幕 URL → 该字幕自己的 request_headers（非空才收录；为空沿用视频默认 headers）。
+    val subtitleHeaders = buildSubtitleHeaders(source)
     Log.i(
         "PlayerActivity",
-        "CDN headers keys=${headers.keys} hasUA=${!userAgent.isNullOrBlank()} url=${source.url.take(80)}",
+        "CDN headers keys=${headers.keys} hasUA=${!userAgent.isNullOrBlank()} " +
+            "subUrls=${subtitleHeaders.keys} url=${source.url.take(80)}",
     )
-    // OkHttp interceptor path: every hop (incl. redirects) keeps this source's headers.
-    MediaCdnHeaders.set(headers)
+    // OkHttp interceptor path: every hop keeps headers; 字幕 URL 命中 byUrl，其余回落视频默认。
+    MediaCdnHeaders.set(headers, subtitleHeaders)
     // Fresh Factory per playSource so line/quality switches never reuse another source's headers.
     val dataSourceFactory = OkHttpDataSource.Factory(NetworkModule.mediaOkHttpClient)
         .setDefaultRequestProperties(headers)
@@ -1378,4 +1462,68 @@ private fun formatScrubTime(ms: Long): String {
     val m = (totalSec % 3600) / 60
     val s = totalSec % 60
     return String.format(Locale.US, "%02d:%02d:%02d", h, m, s)
+}
+
+
+/**
+ * 字幕 URL → 该字幕自己的 request_headers（非空才收录）。
+ * key 用 OkHttp HttpUrl 归一化，与拦截器 request.url.toString() 对齐。
+ */
+private fun buildSubtitleHeaders(source: PlaySourceDto): Map<String, Map<String, String>> {
+    val out = LinkedHashMap<String, Map<String, String>>()
+    for (sub in source.subtitles) {
+        val raw = sub.actualUrl.trim()
+        if (raw.isEmpty()) continue
+        val headers = CdnRequestHeaders.build(sub.requestHeaders)
+        if (headers.isEmpty()) continue
+        val key = raw.toHttpUrlOrNull()?.toString() ?: raw
+        out[key] = headers
+    }
+    return out
+}
+
+
+private const val RESUME_SETTLE_MS = 500L
+
+private const val AD_COUNTDOWN_SECONDS = 5
+
+/** 拖动命中广告节点后的倒计时胶囊（加载圈复用视频原有的圆形进度条）。 */
+@Composable
+private fun AdCountdownOverlay(
+    seconds: Int,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(28.dp))
+            .background(Color(0xCC000000))
+            .border(
+                width = 1.dp,
+                brush = Brush.horizontalGradient(
+                    listOf(Color(0xFFA855F7), Color(0xFF22D3EE)),
+                ),
+                shape = RoundedCornerShape(28.dp),
+            )
+            .padding(horizontal = 22.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "Ad starts in ",
+            color = Color.White,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Medium,
+        )
+        Text(
+            text = seconds.toString(),
+            color = Color(0xFF22D3EE),
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            text = " seconds",
+            color = Color.White,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Medium,
+        )
+    }
 }
