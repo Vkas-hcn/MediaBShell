@@ -16,7 +16,29 @@
       "banner_on": 1,
       "banner_time": 10
     },
-    "news_list": []
+    "news_list": [
+      {
+        "media_id": 0,
+        "title": "A BEST movie 11",
+        "overview": "BEST BEST BEST BEST BEST ",
+        "poster_url": "",
+        "action": "Play now"
+      },
+      {
+        "media_id": 244176,
+        "title": "A BEST movie 22",
+        "overview": "BEST BEST BEST BEST BEST ",
+        "poster_url": "",
+        "action": "Play now"
+      },
+      {
+        "media_id": 244174,
+        "title": "A BEST movie 33",
+        "overview": "BEST BEST BEST BEST BEST ",
+        "poster_url": "",
+        "action": "Play now"
+      }
+    ]
   },
   "hd_ad_config": {
     "hd_ad_interval": 1,

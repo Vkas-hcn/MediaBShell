@@ -71,13 +71,17 @@ object NoticeConfigStore {
     }
 
     fun save(config: NoticeConfig) {
-        appContext?.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
-            ?.edit()
-            ?.putString(
+        val context = appContext ?: return
+        // 远端/缓存下发未携带 news_list（空列表）时保留已生效的列表：
+        // 否则本地 hd_config.json 配置的内容会被无内容的下发清空。
+        val merged = mergeNewsList(config, load())
+        context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+            .edit()
+            .putString(
                 KEY_RAW,
-                kotlinx.serialization.json.Json.encodeToString(NoticeConfig.serializer(), config),
+                json.encodeToString(NoticeConfig.serializer(), merged),
             )
-            ?.apply()
+            .apply()
     }
 
     fun getLong(key: String, defaultValue: Long = 0L): Long {
@@ -97,4 +101,12 @@ object NoticeConfigStore {
         val to = maxOf(start, end)
         return hour in from..to
     }
+
+    /** 下发的 news_list 为空时保留已生效的列表（本地配置优先级兜底）。 */
+    internal fun mergeNewsList(incoming: NoticeConfig, existing: NoticeConfig): NoticeConfig =
+        if (incoming.newsList.isEmpty() && existing.newsList.isNotEmpty()) {
+            incoming.copy(newsList = existing.newsList)
+        } else {
+            incoming
+        }
 }

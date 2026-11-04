@@ -17,6 +17,7 @@ import kotlin.random.Random
 object NotificationContentRepository {
     private const val PREFS_NAME = "notification_copy_rotation"
     private const val KEY_NEXT_INDEX = "next_index"
+    private const val KEY_REMOTE_INDEX = "remote_index"
     private const val POOL_SIZE = 5
     private const val POOL_TTL_MS = 60 * 60 * 1000L
     private const val FETCH_TIMEOUT_MS = 5_000L
@@ -64,7 +65,7 @@ object NotificationContentRepository {
         // 远端下发列表优先（按服务端顺序轮换）
         val remote = noticeConfigProvider().newsList
         if (remote.isNotEmpty()) {
-            val item = pickRemoteItem(remote)
+            val item = pickRemoteItem(context, remote)
             if (item != null && item.mediaId > 0) {
                 val resolved = resolveRemote(item)
                 if (resolved != null) {
@@ -100,12 +101,22 @@ object NotificationContentRepository {
         return content
     }
 
-    /** 远端列表按序轮换。 */
-    private fun pickRemoteItem(list: List<NoticeNewsItem>): NoticeNewsItem? {
+    /** 远端列表按序轮换（游标持久化，跨进程累计，避免每次冷启动都从第一条开始）。 */
+    private fun pickRemoteItem(context: Context?, list: List<NoticeNewsItem>): NoticeNewsItem? {
         if (list.isEmpty()) return null
-        val index = remoteIndex.mod(list.size)
-        remoteIndex = (remoteIndex + 1) % list.size
+        val index = advanceRemoteIndex(context, list.size)
         return list[index]
+    }
+
+    private fun advanceRemoteIndex(context: Context?, size: Int): Int {
+        val prefs = context?.applicationContext
+            ?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val stored = prefs?.getInt(KEY_REMOTE_INDEX, 0) ?: remoteIndex
+        val index = stored.mod(size)
+        val next = (index + 1) % size
+        remoteIndex = next
+        prefs?.edit { putInt(KEY_REMOTE_INDEX, next) }
+        return index
     }
 
     /**
