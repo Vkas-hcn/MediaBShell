@@ -26,11 +26,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FastForward
+import androidx.compose.material.icons.filled.FastRewind
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
@@ -94,6 +99,7 @@ import com.hdvideoplay.media.data.dto.SubtitleDto
 import com.hdvideoplay.media.ui.components.ErrorBox
 import com.hdvideoplay.media.ui.components.UiState
 import com.hdvideoplay.media.ui.theme.MediaTheme
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.awaitCancellation
@@ -1046,6 +1052,7 @@ private fun PlayerContent(
                     episodeNumbers = episodeNumbers,
                     selectedEpisode = currentEpisode,
                     subtitleText = null,
+                    isScrubbing = isScrubbing,
                 ),
                 onBack = onBack,
                 onTogglePlay = {
@@ -1092,6 +1099,16 @@ private fun PlayerContent(
                     onOpenSourcePanel = {
                         showSourcePanel = !showSourcePanel
                     },
+                )
+            }
+
+            // 拖动进度指示器：视频画面中央显示快进/快退图标 + 当前/总时长。
+            if (isScrubbing) {
+                ScrubProgressOverlay(
+                    positionMs = scrubPositionMs,
+                    durationMs = durationMs,
+                    forward = scrubPositionMs >= scrubStartMs,
+                    modifier = Modifier.align(Alignment.Center),
                 )
             }
             // V9 design: Settings opens bottom Source/Quality panel (scrim + surface).
@@ -1325,4 +1342,40 @@ private fun buildSubtitleConfig(sub: SubtitleDto): MediaItem.SubtitleConfigurati
         .setLanguage(lang)
         .setSelectionFlags(0)
         .build()
+}
+
+/** 拖动时视频画面中央的进度指示器：快进/快退图标 + 当前/总时长（HH:MM:SS）。 */
+@Composable
+private fun ScrubProgressOverlay(
+    positionMs: Long,
+    durationMs: Long,
+    forward: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(
+            imageVector = if (forward) Icons.Default.FastForward else Icons.Default.FastRewind,
+            contentDescription = null,
+            tint = Color.White,
+            modifier = Modifier.size(64.dp),
+        )
+        Spacer(Modifier.height(10.dp))
+        Text(
+            text = formatScrubTime(positionMs) + "/" + formatScrubTime(durationMs),
+            color = Color.White,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold,
+        )
+    }
+}
+
+private fun formatScrubTime(ms: Long): String {
+    val totalSec = ms.coerceAtLeast(0L) / 1000L
+    val h = totalSec / 3600
+    val m = (totalSec % 3600) / 60
+    val s = totalSec % 60
+    return String.format(Locale.US, "%02d:%02d:%02d", h, m, s)
 }

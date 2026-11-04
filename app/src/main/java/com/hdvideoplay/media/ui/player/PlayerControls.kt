@@ -81,6 +81,8 @@ data class PlayerControlsState(
     val episodeNumbers: List<Int> = emptyList(),
     val selectedEpisode: Int = 0,
     val subtitleText: String? = null,
+    /** 拖动进度时隐藏中央三键（快退/播放/快进）。 */
+    val isScrubbing: Boolean = false,
 )
 
 /**
@@ -362,14 +364,16 @@ private fun PortraitControls(
             CcButton(subtitleOn = state.subtitleOn, onClick = onToggleCc)
         }
 
-        Row(
-            Modifier.align(Alignment.Center),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(40.dp), // V8-2: 36–48dp (was 18)
-        ) {
-            Seek15Button(forward = false, onClick = onSeekBack15)
-            PrimaryPlayPause(isPlaying = state.isPlaying, onClick = onTogglePlay)
-            Seek15Button(forward = true, onClick = onSeekForward15)
+        if (!state.isScrubbing) {
+            Row(
+                Modifier.align(Alignment.Center),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(40.dp), // V8-2: 36–48dp (was 18)
+            ) {
+                Seek15Button(forward = false, onClick = onSeekBack15)
+                PrimaryPlayPause(isPlaying = state.isPlaying, onClick = onTogglePlay)
+                Seek15Button(forward = true, onClick = onSeekForward15)
+            }
         }
 
         // V8-3: portrait does NOT render Clarity/Speed/Episodes text capsules
@@ -467,14 +471,16 @@ private fun LandscapeControls(
             )
         }
 
-        Row(
-            Modifier.align(Alignment.Center),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(40.dp), // V8-2: 36–48dp (was 18)
-        ) {
-            Seek15Button(forward = false, onClick = onSeekBack15)
-            PrimaryPlayPause(isPlaying = state.isPlaying, onClick = onTogglePlay)
-            Seek15Button(forward = true, onClick = onSeekForward15)
+        if (!state.isScrubbing) {
+            Row(
+                Modifier.align(Alignment.Center),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(40.dp), // V8-2: 36–48dp (was 18)
+            ) {
+                Seek15Button(forward = false, onClick = onSeekBack15)
+                PrimaryPlayPause(isPlaying = state.isPlaying, onClick = onTogglePlay)
+                Seek15Button(forward = true, onClick = onSeekForward15)
+            }
         }
 
         // 08-style: progress row (times at ends) + next row MiniPause | exit
