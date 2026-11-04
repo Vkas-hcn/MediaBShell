@@ -25,9 +25,11 @@ object NotificationContentRepository {
     /** 可注入（单测替换）。 */
     internal var mediaRepository: MediaRepository = MediaRepository()
     internal var nowProvider: () -> Long = System::currentTimeMillis
+    internal var noticeConfigProvider: () -> NoticeConfig = { NoticeConfigStore.load() }
 
     private val lock = Any()
     private var lastId: String? = null
+    private var remoteIndex = 0
     private var dynamicPool: List<NotificationContent> = emptyList()
     private var dynamicPoolFetchedAt = 0L
 
@@ -59,15 +61,22 @@ object NotificationContentRepository {
     )
 
     suspend fun next(context: Context?): NotificationContent? {
-        refreshDynamicPoolIfNeeded()
-        synchronized(lock) {
-            val content = pickDynamic() ?: pickStatic(context)
-            if (content == null) return null
-            // 进程内去重：避免连续两条相同文案
-            if (content.id == lastId) return null
-            lastId = content.id
-            return content
+        // 远端下发列表优先（按服务端顺序轮换）
+        val remote = noticeConfigProvider().newsList
+        if (remote.isNotEmpty()) {
+            val item = pickRemoteItem(remote)
+            if (item != null && item.mediaId > 0) {
+                val resolved = resolveRemote(item)
+                if (resolved != null) {
+                    return gate(resolved, allowRepeat = remote.size == 1)
+                }
+                // 解析失败（无法构成文案）→ 回退随机池
+            }
+            // media_id 未填（<=0）→ 随机池（与现有行为一致）
         }
+        refreshDynamicPoolIfNeeded()
+        val content = pickDynamic() ?: pickStatic(context)
+        return content?.let { gate(it, allowRepeat = false) }
     }
 
     fun resetCopyCache() {
@@ -80,7 +89,61 @@ object NotificationContentRepository {
             dynamicPool = emptyList()
             dynamicPoolFetchedAt = 0L
             lastId = null
+            remoteIndex = 0
         }
+    }
+
+    /** 去重门闩：允许重复（单条下发列表）则直接放行；否则与上一条相同就跳过本次发送。 */
+    private fun gate(content: NotificationContent, allowRepeat: Boolean): NotificationContent? {
+        if (!allowRepeat && content.id == lastId) return null
+        lastId = content.id
+        return content
+    }
+
+    /** 远端列表按序轮换。 */
+    private fun pickRemoteItem(list: List<NoticeNewsItem>): NoticeNewsItem? {
+        if (list.isEmpty()) return null
+        val index = remoteIndex.mod(list.size)
+        remoteIndex = (remoteIndex + 1) % list.size
+        return list[index]
+    }
+
+    /**
+     * 构建远端指定影片的通知内容：
+     * 标题/简介/海报任一缺失时按 media_id 调详情接口补全（最多一次网络）；
+     * 补全后仍无标题 → null（调用方回退随机池）；仅缺海报 → 固定图标兜底。
+     */
+    private suspend fun resolveRemote(item: NoticeNewsItem): NotificationContent? {
+        var title = item.title.trim()
+        var overview = item.overview.trim()
+        var posterUrl = PosterUtils.resolvePosterUrl(item.posterUrl)
+        if (title.isEmpty() || overview.isEmpty() || posterUrl == null) {
+            // detail() 网络异常会直接抛出（MediaRepository 不吞异常），这里兜住按失败处理
+            val detail = withTimeoutOrNull(FETCH_TIMEOUT_MS) {
+                try {
+                    mediaRepository.detail(item.mediaId).getOrNull()
+                } catch (cancel: kotlinx.coroutines.CancellationException) {
+                    throw cancel
+                } catch (t: Throwable) {
+                    null
+                }
+            }
+            val info = detail?.details
+            if (title.isEmpty()) title = info?.title.orEmpty().trim()
+            if (overview.isEmpty()) overview = info?.overview.orEmpty().trim()
+            if (posterUrl == null) posterUrl = PosterUtils.resolvePosterUrl(info?.posterPath)
+        }
+        if (title.isEmpty()) return null
+        return NotificationContent(
+            id = "news_" + item.mediaId,
+            title = title,
+            summary = overview.take(SUMMARY_MAX_LEN),
+            action = item.action.trim().ifBlank { "Play now" },
+            url = "",
+            icon = NotificationIcon.VIDEO,
+            mediaId = item.mediaId,
+            posterUrl = posterUrl.orEmpty(),
+        )
     }
 
     private suspend fun refreshDynamicPoolIfNeeded() {
