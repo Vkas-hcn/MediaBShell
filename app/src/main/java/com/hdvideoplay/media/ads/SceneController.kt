@@ -49,6 +49,7 @@ class SceneController(
         ready.removeAll { it === entry || sameSlot(it, entry) }
         val refill = repo()?.scene(sceneName)?.refillOnConsume == true
         Log.i(TAG, "consume($sceneName) unit=${entry.node.unitId} refill=$refill")
+        AdLogger.consume(sceneName, entry.node.unitId, refill)
         if (refill) load()
     }
 
@@ -84,24 +85,29 @@ class SceneController(
             coldReadyProbe?.invoke() == true
         ) {
             Log.d(TAG, "load($sceneName) skipped — cold pool still Ready")
+            AdLogger.loadBlocked(sceneName, "hot_skip_cold_ready")
             return
         }
         pruneExpired()
         if (ready.isNotEmpty()) {
             Log.d(TAG, "load($sceneName) skip — already Ready P${ready.first().node.priority}")
+            AdLogger.loadBlocked(sceneName, "already_ready")
             return
         }
         if (!LoadGate.tryAcquire(sceneName)) {
             Log.d(TAG, "load($sceneName) skip — LoadGate (jb3.u) in flight")
+            AdLogger.loadBlocked(sceneName, "load_in_flight")
             return
         }
         val nodes = repository.nodesSorted(sceneName)
         if (nodes.isEmpty()) {
             LoadGate.release(sceneName)
             Log.w(TAG, "load($sceneName) no nodes")
+            AdLogger.loadBlocked(sceneName, "no_nodes")
             return
         }
         Log.i(TAG, "load($sceneName) nodes=${nodes.size} forceHot=$ignoreColdProbe")
+        AdLogger.loadStart(sceneName, nodes.first().format)
         tryLoadWaterfall(nodes, index = 0)
     }
 
@@ -109,9 +115,11 @@ class SceneController(
         if (index >= nodes.size) {
             LoadGate.release(sceneName)
             Log.w(TAG, "load($sceneName) waterfall exhausted")
+            AdLogger.waterfallExhausted(sceneName)
             return
         }
         val node = nodes[index]
+        AdLogger.waterfallTry(sceneName, index, node.platform, node.format, node.unitId)
         val format = AdFormat.fromJson(node.format)
         if (format == null) {
             Log.w(TAG, "Unknown format ${node.format}, skip")
@@ -134,9 +142,11 @@ class SceneController(
                         ready.add(entry)
                         LoadGate.release(sceneName)
                         Log.i(TAG, "load($sceneName) OK P${node.priority} ${format.jsonKey} ${node.unitId}")
+                        AdLogger.loadSuccess(sceneName, node.format, node.unitId)
                     }
                     is AdLoadResult.Failure -> {
                         Log.w(TAG, "load($sceneName) fail P${node.priority}: ${result.reason}")
+                        AdLogger.loadFailed(sceneName, node.format, node.unitId, result.reason)
                         tryLoadWaterfall(nodes, index + 1)
                     }
                 }
@@ -158,6 +168,7 @@ class SceneController(
                 ?: (now - entry.loadedAtMs > ttl)
             if (expired) {
                 Log.d(TAG, "prune($sceneName) expired unit=${entry.node.unitId}")
+                AdLogger.cacheExpired(sceneName, entry.node.unitId, now - entry.loadedAtMs, ttl)
             }
             expired
         }

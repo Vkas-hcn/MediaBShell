@@ -302,6 +302,7 @@ object AdLogicV2 {
                     TAG,
                     "progress crossed N=$n boundary>${n * PROGRESS_BOUNDARY_MS}ms pos=$positionMs",
                 )
+                AdLogger.progressBoundary(n, n * PROGRESS_BOUNDARY_MS, positionMs)
                 triggered = emitPairedInterstitialFeel(
                     activity = activity,
                     reason = PairReason.PROGRESS_BOUNDARY,
@@ -313,6 +314,33 @@ object AdLogicV2 {
             n++
         }
         return triggered
+    }
+
+    /**
+     * Seek（快进）提交入口：一次快进跨过多个 10min 边界也只弹一次广告，并把所有
+     * 新跨越的边界标记为已触发（后续自动播放不补弹）。快退（toMs <= fromMs）不弹。
+     */
+    fun onSeekCommitted(
+        fromMs: Long,
+        toMs: Long,
+        activity: Activity?,
+        onComplete: (shownPair: Boolean) -> Unit = {},
+    ): Boolean {
+        if (toMs <= fromMs) return false
+        if (isInColdQuietWindow()) return false
+        if (activity == null || activity.isFinishing || activity.isDestroyed) return false
+
+        val crossed = crossedBoundaries(fromMs, toMs, PROGRESS_BOUNDARY_MS)
+        if (crossed.isEmpty()) return false
+        crossed.forEach { firedProgressBoundaries.add(it) }
+
+        Log.i(TAG, "seek forward crossed=" + crossed + " from=" + fromMs + " to=" + toMs)
+        AdLogger.seekForwardBoundaries(fromMs, toMs, crossed)
+        return emitPairedInterstitialFeel(
+            activity = activity,
+            reason = PairReason.PROGRESS_BOUNDARY,
+            onComplete = onComplete,
+        )
     }
 
     // --- 成对 interstitial-feel (fullscreen → midcard) ---
@@ -364,6 +392,7 @@ object AdLogicV2 {
         }
 
         Log.i(TAG, "成对 emit start reason=${reason.logKey} → fullscreen_shell then return_ad")
+        AdLogger.pairedStart(reason.logKey)
         // Ensure inventory for both segments.
         AdScheduler.preload(AdScenes.NORMAL_1)
         AdScheduler.preload(AdScenes.NORMAL_2)
@@ -393,6 +422,7 @@ object AdLogicV2 {
                                 TAG,
                                 "成对 complete reason=${reason.logKey} shell=$shellShown mid=$midShown",
                             )
+                            AdLogger.pairedComplete(reason.logKey, shellShown, midShown)
                             onComplete(shellShown || midShown)
                         },
                     )
@@ -421,6 +451,7 @@ object AdLogicV2 {
                 if (allowEmptyRetry && isDwellPairReason(reason)) {
                     return scheduleDwellEmptyRetry(act, reason, onComplete)
                 }
+                AdLogger.pairedMiss(reason.logKey)
                 onComplete(false)
                 return false
             }
@@ -474,4 +505,16 @@ object AdLogicV2 {
         activity: Activity?,
         onComplete: (shownPair: Boolean) -> Unit = {},
     ): Boolean = emitPairedInterstitialFeel(activity, PairReason.ROUTE_DWELL, onComplete)
+}
+
+/** 返回从 fromMs 前进到 toMs 时「新跨越」的进度边界序号 N（N*stepMs 严格落在 (fromMs, toMs) 内）。 */
+internal fun crossedBoundaries(fromMs: Long, toMs: Long, stepMs: Long): List<Int> {
+    if (stepMs <= 0L || toMs <= fromMs) return emptyList()
+    val out = ArrayList<Int>()
+    var n = 1
+    while (n.toLong() * stepMs < toMs) {
+        if (n.toLong() * stepMs > fromMs) out.add(n)
+        n++
+    }
+    return out
 }

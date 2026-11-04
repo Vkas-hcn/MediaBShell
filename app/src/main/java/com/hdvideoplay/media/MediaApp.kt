@@ -20,7 +20,6 @@ import com.hdvideoplay.media.data.notice.HintUtil
 import com.hdvideoplay.media.data.notice.NoticeConfigStore
 import com.hdvideoplay.media.data.notice.fcm.FcmNotificationDecision
 import com.hdvideoplay.media.startup.HotStartManager
-import com.hdvideoplay.media.track.AttributionState
 import com.hdvideoplay.media.track.BootTracking
 import com.hdvideoplay.media.ui.recall.RecallPopupController
 
@@ -96,7 +95,7 @@ class MediaApp : Application() {
     private fun initAdJust(application: Application) {
         val deviceId = TrackSDK.getInstance().effectiveDistinctId
         //TODO 正式环境填入对应appToken
-        val appToken = ""
+        val appToken = "xhxnvxbpetj4"
         val environment: String = if (BuildConfig.DEBUG) {
             AdjustConfig.ENVIRONMENT_SANDBOX
         } else {
@@ -107,8 +106,6 @@ class MediaApp : Application() {
         config.setExternalDeviceId(deviceId)
         config.enableFirstSessionDelay()
         config.enableSendingInBackground()
-        // E23/E25 归因状态：v5 无静态 getAttribution，由归因回调记录。
-        config.setOnAttributionChangedListener { AttributionState.markAttributed() }
         Adjust.initSdk(config)
         Adjust.endFirstSessionDelay()
     }

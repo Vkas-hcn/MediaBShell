@@ -73,6 +73,7 @@ class AdActivity : ComponentActivity() {
         bindNative(ad)
         shown = true
         showStartedAtMs = SystemClock.elapsedRealtime()
+        AdLogger.showPresented(pendingLocation.jsonKey, pending.entry.format.jsonKey, pending.entry.node.unitId)
         // 收入：真实曝光由 AdMob 触发 OnPaidEvent → BI/Firebase + Adjust（展示前挂载）。
         val entry = pendingEntry
         if (entry != null) {
@@ -262,6 +263,7 @@ class AdActivity : ComponentActivity() {
             )
         }
         Log.i(TAG, "settle mode=$presentMode shown=${shownFlag && shown} → scheduler callback")
+        AdLogger.showDismissed(pendingLocation.jsonKey, entry?.format?.jsonKey.orEmpty(), entry?.node?.unitId.orEmpty())
         runCatching { cb?.invoke(shownFlag && shown) }
     }
 

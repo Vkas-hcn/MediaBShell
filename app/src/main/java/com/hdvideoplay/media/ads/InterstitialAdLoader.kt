@@ -142,6 +142,7 @@ class InterstitialAdLoader : AdFormatLoader {
         ad.fullScreenContentCallback = object : FullScreenContentCallback() {
             override fun onAdDismissedFullScreenContent() {
                 Log.i(TAG, "INT dismissed loc=${location.jsonKey}")
+                AdLogger.showDismissed(location.jsonKey, entry.format.jsonKey, entry.node.unitId)
                 // 关闭：实际展示过才上报，展示时长 = 出全屏到关闭。
                 if (!closeReported && showStartedAtMs > 0) {
                     closeReported = true
@@ -157,16 +158,19 @@ class InterstitialAdLoader : AdFormatLoader {
 
             override fun onAdFailedToShowFullScreenContent(adError: AdError) {
                 Log.w(TAG, "INT show fail ${adError.code} ${adError.message}")
+                AdLogger.showFailed(location.jsonKey, entry.format.jsonKey, "show_failed")
                 settle(false)
             }
 
             override fun onAdShowedFullScreenContent() {
                 showStartedAtMs = SystemClock.elapsedRealtime()
                 Log.i(TAG, "INT showed loc=${location.jsonKey} unit=${entry.node.unitId}")
+                AdLogger.showPresented(location.jsonKey, entry.format.jsonKey, entry.node.unitId)
             }
 
             override fun onAdClicked() {
                 Log.i(TAG, "INT clicked (user) — do not auto-click in tests")
+                AdLogger.adClicked(location.jsonKey, entry.format.jsonKey)
                 AdTrackingHelper.trackAdClickWithSource(
                     adType, location.jsonKey, entry.adId, "AdMob",
                     AdTrack.adSourceOf(ad.responseInfo), "",

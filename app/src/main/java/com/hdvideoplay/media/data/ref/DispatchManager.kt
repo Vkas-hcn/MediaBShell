@@ -152,7 +152,7 @@ object DispatchManager {
                 DataTool.dispatch_fetched_at = System.currentTimeMillis()
                 AdScheduler.sceneRepo()?.loadFromJson(result.configJson)
                 NoticeConfigStore.save(result.config.notice)
-                // 配置拉取成功后评估买量/自然量判定（E23/E25，幂等一次性）。
+                // 配置拉取成功后评估买量判定（E23，幂等一次性）。
                 AttributionState.evaluateOnce(app)
                 Log.i(TAG, "dispatch SUCCESS (attempt " + attempt + ")")
                 return

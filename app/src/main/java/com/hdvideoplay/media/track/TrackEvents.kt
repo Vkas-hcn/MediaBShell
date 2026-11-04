@@ -64,7 +64,6 @@ object TrackEvents {
     const val KEEPALIVE_TRIGGER = "keepalive_trigger"
     const val AD_BLOCKED = "ad_blocked"
     const val AD_SHOW_TIMEOUT = "ad_show_timeout"
-    const val BIORGANIC = "biorganic"
     const val RETENTION_D1 = "retention_d1"
     const val RETENTION_D7 = "retention_d7"
     const val RETENTION_D14 = "retention_d14"
@@ -179,11 +178,6 @@ object TrackEvents {
      */
     fun activated() {
         bi(ACTIVATED, null)
-    }
-
-    /** E25 biorganic（自然量用户标记）：仅出 BI，每设备只报一次。 */
-    fun biorganic() {
-        bi(BIORGANIC, null)
     }
 
     /** E19 reactivation_landing：拉活打开 App 后落到目标页（source + landing_page + pos_id 可空）。 */

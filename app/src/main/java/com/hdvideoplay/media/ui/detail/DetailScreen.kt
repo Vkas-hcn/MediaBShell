@@ -252,9 +252,10 @@ private fun DetailContent(
                     onSeekForward15 = {
                         if (!loading) shellPos = (shellPos + 15_000L).coerceAtMost(shellDur)
                     },
-                    onSeek = {
+                    onScrubTo = {
                         if (!loading) shellPos = it.coerceIn(0L, shellDur)
                     },
+                    onScrubEnd = { /* 预览壳：无真实 seek，无需提交 */ },
                     onToggleCc = {
                         if (!loading) shellCc = !shellCc
                     },

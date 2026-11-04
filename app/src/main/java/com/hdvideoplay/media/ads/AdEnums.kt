@@ -66,7 +66,6 @@ enum class AdPlatform(val jsonKey: String) {
 }
 
 object AdScenes {
-    const val COLD_OPEN_A = "cold_open_a"
     const val COLD_OPEN = "cold_open"
     const val HOT_OPEN = "hot_open"
     const val NORMAL_1 = "normal_1"

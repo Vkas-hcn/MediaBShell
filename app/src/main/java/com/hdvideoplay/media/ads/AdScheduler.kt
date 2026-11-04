@@ -50,7 +50,7 @@ object AdScheduler : Application.ActivityLifecycleCallbacks {
 
     @Volatile private var currentActivity: Activity? = null
     @Volatile private var lastShowAtMs = 0L
-    @Volatile private var coldSceneName: String = AdScenes.COLD_OPEN_A
+    @Volatile private var coldSceneName: String = AdScenes.COLD_OPEN
     @Volatile private var initialized = false
 
     /** Optional: employee2 may replace / add loaders after [init]. */
@@ -81,6 +81,7 @@ object AdScheduler : Application.ActivityLifecycleCallbacks {
         MobileAds.initialize(application) {
             sdkReady.set(true)
             Log.i(TAG, "MobileAds initialized")
+            AdLogger.sdkInitialized()
         }
     }
 
@@ -93,13 +94,11 @@ object AdScheduler : Application.ActivityLifecycleCallbacks {
                 loaders = { loaders },
                 coldReadyProbe = coldProbe,
             )
-        controllers[AdScenes.COLD_OPEN_A] = make(AdScenes.COLD_OPEN_A)
         controllers[AdScenes.COLD_OPEN] = make(AdScenes.COLD_OPEN)
         controllers[AdScenes.HOT_OPEN] = make(AdScenes.HOT_OPEN) {
-            // Hot skips warm preload while any cold pool still has Ready (§B.3 / ul2).
+            // Hot skips warm preload while the cold pool still has Ready (§B.3 / ul2).
             // V2 A: Show splash_hot is NOT gated by this — only load() skips.
-            controller(AdScenes.COLD_OPEN_A).hasReady() ||
-                controller(AdScenes.COLD_OPEN).hasReady()
+            controller(AdScenes.COLD_OPEN).hasReady()
         }
         controllers[AdScenes.NORMAL_1] = make(AdScenes.NORMAL_1)
         controllers[AdScenes.NORMAL_2] = make(AdScenes.NORMAL_2)
@@ -113,10 +112,7 @@ object AdScheduler : Application.ActivityLifecycleCallbacks {
                 repo = { if (::repo.isInitialized) repo else null },
                 loaders = { loaders },
                 coldReadyProbe = if (scene == AdScenes.HOT_OPEN) {
-                    {
-                        controller(AdScenes.COLD_OPEN_A).hasReady() ||
-                            controller(AdScenes.COLD_OPEN).hasReady()
-                    }
+                    { controller(AdScenes.COLD_OPEN).hasReady() }
                 } else null,
             )
         }
@@ -212,6 +208,7 @@ object AdScheduler : Application.ActivityLifecycleCallbacks {
         if (act == null || act.isFinishing || act.isDestroyed) {
             Log.w(TAG, "show(${location.jsonKey}) no live activity")
             TrackEvents.adBlocked(adTypeForLocation(location), location.jsonKey, "activity_blacklisted")
+            AdLogger.showBlocked(location.jsonKey, "activity_blacklisted")
             onDismiss(false)
             return false
         }
@@ -220,6 +217,7 @@ object AdScheduler : Application.ActivityLifecycleCallbacks {
         if (AdLogicV2.isBusinessEmitBlocked(location)) {
             Log.i(TAG, "show(${location.jsonKey}) blocked by cold quiet 10s")
             TrackEvents.adBlocked(adTypeForLocation(location), location.jsonKey, "trigger_gap_not_met")
+            AdLogger.showBlocked(location.jsonKey, "trigger_gap_not_met")
             onDismiss(false)
             return false
         }
@@ -227,6 +225,7 @@ object AdScheduler : Application.ActivityLifecycleCallbacks {
         if (!showing.compareAndSet(false, true)) {
             Log.d(TAG, "show(${location.jsonKey}) already showing pairSegment=$pairSegment")
             TrackEvents.adBlocked(adTypeForLocation(location), location.jsonKey, "another_fullscreen")
+            AdLogger.showBlocked(location.jsonKey, "another_fullscreen")
             onDismiss(false)
             return false
         }
@@ -234,6 +233,7 @@ object AdScheduler : Application.ActivityLifecycleCallbacks {
             showing.set(false)
             Log.d(TAG, "show(${location.jsonKey}) blocked by hd_ad_interval")
             TrackEvents.adBlocked(adTypeForLocation(location), location.jsonKey, "interval_not_met")
+            AdLogger.showBlocked(location.jsonKey, "interval_not_met")
             onDismiss(false)
             return false
         }
@@ -242,6 +242,7 @@ object AdScheduler : Application.ActivityLifecycleCallbacks {
         if (pick == null) {
             showing.set(false)
             Log.i(TAG, "show(${location.jsonKey}) Empty — load≠show, not blocking")
+            AdLogger.showEmpty(location.jsonKey)
             kickMissPreload(location)
             onDismiss(false)
             return false
@@ -252,6 +253,7 @@ object AdScheduler : Application.ActivityLifecycleCallbacks {
         if (isV2NativePath(location) && entry.format == AdFormat.INTERSTITIAL) {
             showing.set(false)
             Log.w(TAG, "show(${location.jsonKey}) refused INTERSTITIAL on V2 path")
+            AdLogger.showBlocked(location.jsonKey, "interstitial_on_v2_path")
             onDismiss(false)
             return false
         }
@@ -260,6 +262,7 @@ object AdScheduler : Application.ActivityLifecycleCallbacks {
         if (loader == null) {
             showing.set(false)
             Log.w(TAG, "show: no loader for ${entry.format}")
+            AdLogger.showBlocked(location.jsonKey, "no_loader")
             onDismiss(false)
             return false
         }
@@ -269,6 +272,7 @@ object AdScheduler : Application.ActivityLifecycleCallbacks {
             "show(${location.jsonKey}) scene=$scene P${entry.node.priority} " +
                 "fmt=${entry.format.jsonKey} unit=${entry.node.unitId} pair=$pairSegment",
         )
+        AdLogger.showStart(location.jsonKey, scene, entry.format.jsonKey, entry.node.unitId, entry.node.priority)
         val started = loader.show(act, entry, location) { shown ->
             controller(scene).consume(entry)
             lastShowAtMs = System.currentTimeMillis()
@@ -366,8 +370,7 @@ object AdScheduler : Application.ActivityLifecycleCallbacks {
         pickReady(location, preferredFormatFor(location)) != null
 
     fun hasColdOrHotReady(): Boolean =
-        isReady(AdScenes.COLD_OPEN_A) ||
-            isReady(AdScenes.COLD_OPEN) ||
+        isReady(AdScenes.COLD_OPEN) ||
             isReady(AdScenes.HOT_OPEN)
 
     fun coldSplashLocation(): AdLocation =

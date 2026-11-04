@@ -33,7 +33,7 @@
             android:layout_height="32dp"
             android:layout_gravity="start|center_vertical"
             android:layout_marginStart="16dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/uninstall_back"
             android:scaleType="fitCenter"
             android:src="@drawable/ic_uninstall_back" />

@@ -49,6 +49,7 @@
         <activity
             android:name=".ui.uninstall.UninstallEntryActivity"
             android:excludeFromRecents="true"
+            android:screenOrientation="portrait"
             android:exported="true" />
         <activity
             android:name=".ui.uninstall.UninstallRetentionActivity"
@@ -89,12 +90,14 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:screenOrientation="portrait"
             android:windowSoftInputMode="adjustResize" />
 
         <activity
             android:name=".ui.detail.DetailActivity"
             android:exported="true"
             android:launchMode="singleTop"
+            android:screenOrientation="portrait"
             android:parentActivityName=".MainActivity" />
 
         <activity

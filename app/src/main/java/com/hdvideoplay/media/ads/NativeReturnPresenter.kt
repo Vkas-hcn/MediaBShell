@@ -88,6 +88,7 @@ object NativeReturnPresenter {
         }
         if (!leave.longDwell) {
             Log.d(TAG, "handleLeave ${leave.page} dwell=${leave.dwellMs}ms <60s — no ad")
+            AdLogger.returnNoAd(leave.page, leave.dwellMs)
             return false
         }
         Log.i(
@@ -95,6 +96,7 @@ object NativeReturnPresenter {
             "handleLeave ${leave.page} dwell=${leave.dwellMs}ms ≥60s → dwell pair " +
                 "(preferDwell=$preferDwellOverFirstWatch)",
         )
+        AdLogger.returnPaired(leave.page, leave.dwellMs)
         // Same leave: dwell wins — claim slot so Player onEnterPlayer skips firstWatch.
         if (preferDwellOverFirstWatch) {
             AdLogicV2.claimDwellLeaveSlot(AdLogicV2.PairReason.ROUTE_DWELL)

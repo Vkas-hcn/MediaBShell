@@ -667,6 +667,10 @@ private fun PlayerContent(
     var isPlaying by remember { mutableStateOf(false) }
     var positionMs by remember { mutableLongStateOf(0L) }
     var durationMs by remember { mutableLongStateOf(0L) }
+    var isScrubbing by remember { mutableStateOf(false) }
+    var scrubPositionMs by remember { mutableLongStateOf(0L) }
+    var scrubStartMs by remember { mutableLongStateOf(0L) }
+    var scrubWasPlaying by remember { mutableStateOf(false) }
     var subtitleOn by remember { mutableStateOf(false) }
     var hasTextTracks by remember { mutableStateOf(false) }
     var locked by remember { mutableStateOf(false) }
@@ -834,7 +838,9 @@ private fun PlayerContent(
             // 播放会话：真实观看时长累计 + 25/50/75/100 进度档位上报（会话内去重）。
             tracker.onPositionTick(positionMs, durationMs, isPlaying, isBuffering)
             // V2 D: N×10min progress boundaries (not wall-clock hd_play_interval).
-            AdLogicV2.onPlaybackProgress(positionMs, act)
+            if (!isScrubbing) {
+                AdLogicV2.onPlaybackProgress(positionMs, act)
+            }
             delay(500)
         }
     }
@@ -919,13 +925,49 @@ private fun PlayerContent(
     }
 
     fun seekBy(deltaMs: Long) {
-        val target = (player.currentPosition + deltaMs).coerceAtLeast(0L)
+        val from = player.currentPosition.coerceAtLeast(0L)
         val dur = player.duration
+        val target = (from + deltaMs).coerceAtLeast(0L)
         val clamped = if (dur > 0) target.coerceAtMost(dur) else target
         player.seekTo(clamped)
         writeWatchHistory(force = false, posMs = clamped, durMs = if (dur > 0) dur else 0L)
         tracker.onSeeked(clamped, if (dur > 0) dur else 0L)
-        AdLogicV2.onPlaybackProgress(clamped, context as? android.app.Activity)
+        // 快进才判定广告；快退不弹。
+        if (clamped > from) {
+            AdLogicV2.onSeekCommitted(from, clamped, context as? android.app.Activity)
+        }
+    }
+
+    // --- UI-first scrub：拖动进度条/屏幕只预览，松手才 seek + 判定广告 ---
+
+    fun beginScrub() {
+        if (isScrubbing) return
+        isScrubbing = true
+        scrubStartMs = positionMs
+        scrubPositionMs = positionMs
+        scrubWasPlaying = isPlaying
+        if (isPlaying) player.pause()
+    }
+
+    fun previewScrub(targetMs: Long) {
+        if (!isScrubbing) beginScrub()
+        val dur = durationMs
+        scrubPositionMs = targetMs.coerceAtLeast(0L).let { if (dur > 0) it.coerceAtMost(dur) else it }
+    }
+
+    fun commitScrub() {
+        if (!isScrubbing) return
+        val fromMs = scrubStartMs
+        val toMs = scrubPositionMs
+        val dur = durationMs
+        isScrubbing = false
+        player.seekTo(toMs.coerceAtLeast(0L).let { if (dur > 0) it.coerceAtMost(dur) else it })
+        if (scrubWasPlaying) player.play()
+        writeWatchHistory(force = false, posMs = toMs, durMs = dur)
+        tracker.onSeeked(toMs, dur)
+        if (toMs > fromMs) {
+            AdLogicV2.onSeekCommitted(fromMs, toMs, context as? android.app.Activity)
+        }
     }
 
     val autoLabel = source?.quality?.takeIf { it.isNotBlank() }
@@ -996,7 +1038,7 @@ private fun PlayerContent(
                 state = PlayerControlsState(
                     title = displayTitle,
                     isPlaying = isPlaying,
-                    positionMs = positionMs,
+                    positionMs = if (isScrubbing) scrubPositionMs else positionMs,
                     durationMs = durationMs,
                     subtitleOn = subtitleOn,
                     locked = locked,
@@ -1011,12 +1053,9 @@ private fun PlayerContent(
                 },
                 onSeekBack15 = { seekBy(-15_000L) },
                 onSeekForward15 = { seekBy(15_000L) },
-                onSeek = {
-                    player.seekTo(it)
-                    writeWatchHistory(force = false, posMs = it)
-                    tracker.onSeeked(it, durationMs)
-                    AdLogicV2.onPlaybackProgress(it, context as? android.app.Activity)
-                },
+                onScrubTo = { targetMs -> previewScrub(targetMs) },
+                onScrubEnd = { commitScrub() },
+                enableScreenSeek = true,
                 onToggleCc = {
                     if (!sourceHasSubtitles(source) && !hasTextTracks) {
                         Toast.makeText(

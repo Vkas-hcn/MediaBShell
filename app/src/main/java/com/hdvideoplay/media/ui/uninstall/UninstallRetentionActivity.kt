@@ -5,6 +5,7 @@ import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import android.view.View
+import android.view.ViewGroup
 import androidx.activity.ComponentActivity
 import androidx.activity.addCallback
 import androidx.core.view.ViewCompat
@@ -16,6 +17,7 @@ import com.hdvideoplay.media.MainActivity
 import com.hdvideoplay.media.R
 import com.hdvideoplay.media.ads.AdLocation
 import com.hdvideoplay.media.ads.AdScheduler
+import com.hdvideoplay.media.ads.InlineNativeAdPresenter
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.roundToInt
 
@@ -23,6 +25,7 @@ import kotlin.math.roundToInt
 class UninstallRetentionActivity : ComponentActivity() {
 
     private val navigating = AtomicBoolean(false)
+    private var inlineAd: InlineNativeAdPresenter? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,6 +39,22 @@ class UninstallRetentionActivity : ComponentActivity() {
         findViewById<View>(R.id.uninstall_fix).setOnClickListener { goMain() }
         findViewById<View>(R.id.uninstall_speed).setOnClickListener { goMain() }
         findViewById<View>(R.id.uninstall_still).setOnClickListener { startConfirmAfterCachedAd() }
+
+        inlineAd = InlineNativeAdPresenter(
+            findViewById<ViewGroup>(R.id.uninstall_ad_container),
+            UNINSTALL_NATIVE_UNIT,
+        ).also { it.show() }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        inlineAd?.show()
+    }
+
+    override fun onDestroy() {
+        inlineAd?.release()
+        inlineAd = null
+        super.onDestroy()
     }
 
     /** 有缓存广告先展示（现有 RETURN_AD 池）；无缓存/失败立即进确认页。 */
@@ -95,4 +114,8 @@ class UninstallRetentionActivity : ComponentActivity() {
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).roundToInt()
+
+    companion object {
+        private const val UNINSTALL_NATIVE_UNIT = "ca-app-pub-3940256099942544/2247696110"
+    }
 }

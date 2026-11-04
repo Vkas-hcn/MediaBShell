@@ -44,24 +44,6 @@
   },
   "hd_load_scenes": [
     {
-      "hd_load_scene": "cold_open_a",
-      "hd_refill_on_consume": false,
-      "hd_nodes": [
-        {
-          "hd_platform": "admob",
-          "hd_format": "launch_screen",
-          "hd_id": "ca-app-pub-3940256099942544/9257395921",
-          "hd_priority": 1
-        },
-        {
-          "hd_platform": "admob",
-          "hd_format": "launch_screen",
-          "hd_id": "ca-app-pub-3940256099942544/9257395921",
-          "hd_priority": 2
-        }
-      ]
-    },
-    {
       "hd_load_scene": "cold_open",
       "hd_refill_on_consume": false,
       "hd_nodes": [

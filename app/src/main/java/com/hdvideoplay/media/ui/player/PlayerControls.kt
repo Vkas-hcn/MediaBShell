@@ -8,6 +8,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,12 +46,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -93,7 +97,9 @@ fun PlayerControlsHost(
     onTogglePlay: () -> Unit,
     onSeekBack15: () -> Unit,
     onSeekForward15: () -> Unit,
-    onSeek: (Long) -> Unit,
+    onScrubTo: (Long) -> Unit,
+    onScrubEnd: () -> Unit,
+    enableScreenSeek: Boolean = false,
     onToggleCc: () -> Unit = {},
     /** Clarity: cycle quality / line (existing AUTO behavior). */
     onAuto: () -> Unit = {},
@@ -150,21 +156,51 @@ fun PlayerControlsHost(
         }
     }
 
+    val latestLocked = rememberUpdatedState(state.locked)
+    val latestPosition = rememberUpdatedState(state.positionMs)
+    val latestDuration = rememberUpdatedState(state.durationMs)
+
     Box(
         modifier = modifier
             .fillMaxSize()
-            .clickable(
-                indication = null,
-                interactionSource = remember { MutableInteractionSource() },
-            ) {
-                if (state.locked) {
-                    controlsVisible = !controlsVisible
-                    hideToken++
+            .pointerInput(Unit) {
+                detectTapGestures(onTap = {
+                    if (latestLocked.value) {
+                        controlsVisible = !controlsVisible
+                        hideToken++
+                    } else {
+                        controlsVisible = !controlsVisible
+                        if (controlsVisible) hideToken++
+                    }
+                })
+            }
+            .then(
+                if (enableScreenSeek) {
+                    Modifier.pointerInput(Unit) {
+                        var totalDragPx = 0f
+                        var startPositionMs = 0L
+                        detectHorizontalDragGestures(
+                            onDragStart = {
+                                totalDragPx = 0f
+                                startPositionMs = latestPosition.value
+                            },
+                            onDragEnd = { onScrubEnd() },
+                            onDragCancel = { onScrubEnd() },
+                        ) { change, dragAmount ->
+                            change.consume()
+                            totalDragPx += dragAmount
+                            val widthPx = size.width.toFloat()
+                            val duration = latestDuration.value
+                            if (widthPx > 0f && duration > 0L) {
+                                val target = startPositionMs + (totalDragPx / widthPx * duration).toLong()
+                                onScrubTo(target)
+                            }
+                        }
+                    }
                 } else {
-                    controlsVisible = !controlsVisible
-                    if (controlsVisible) hideToken++
+                    Modifier
                 }
-            },
+            ),
     ) {
         val sub = state.subtitleText
         if (!sub.isNullOrBlank()) {
@@ -194,7 +230,8 @@ fun PlayerControlsHost(
                     onTogglePlay = { bumpVisible(); onTogglePlay() },
                     onSeekBack15 = { bumpVisible(); onSeekBack15() },
                     onSeekForward15 = { bumpVisible(); onSeekForward15() },
-                    onSeek = { bumpVisible(); onSeek(it) },
+                    onScrubTo = { bumpVisible(); onScrubTo(it) },
+                    onScrubEnd = { onScrubEnd() },
                     onToggleCc = { bumpVisible(); onToggleCc() },
                     onClarity = { bumpVisible(); onOpenSourcePanel() },
                     onSpeed = { cycleSpeed() },
@@ -213,7 +250,8 @@ fun PlayerControlsHost(
                     onTogglePlay = { bumpVisible(); onTogglePlay() },
                     onSeekBack15 = { bumpVisible(); onSeekBack15() },
                     onSeekForward15 = { bumpVisible(); onSeekForward15() },
-                    onSeek = { bumpVisible(); onSeek(it) },
+                    onScrubTo = { bumpVisible(); onScrubTo(it) },
+                    onScrubEnd = { onScrubEnd() },
                     onToggleCc = { bumpVisible(); onToggleCc() },
                     onFullscreen = onFullscreen,
                 )
@@ -288,7 +326,8 @@ private fun PortraitControls(
     onTogglePlay: () -> Unit,
     onSeekBack15: () -> Unit,
     onSeekForward15: () -> Unit,
-    onSeek: (Long) -> Unit,
+    onScrubTo: (Long) -> Unit,
+    onScrubEnd: () -> Unit,
     onToggleCc: () -> Unit,
     onFullscreen: () -> Unit,
 ) {
@@ -343,7 +382,8 @@ private fun PortraitControls(
         ) {
             PortraitProgressRow(
                 state = state,
-                onSeek = onSeek,
+                onScrubTo = onScrubTo,
+                onScrubEnd = onScrubEnd,
                 onTogglePlay = onTogglePlay,
                 onFullscreen = onFullscreen,
             )
@@ -359,7 +399,8 @@ private fun LandscapeControls(
     onTogglePlay: () -> Unit,
     onSeekBack15: () -> Unit,
     onSeekForward15: () -> Unit,
-    onSeek: (Long) -> Unit,
+    onScrubTo: (Long) -> Unit,
+    onScrubEnd: () -> Unit,
     onToggleCc: () -> Unit,
     onClarity: () -> Unit,
     onSpeed: () -> Unit,
@@ -446,7 +487,8 @@ private fun LandscapeControls(
             LandscapeProgressBlock(
                 state = state,
                 speedLabel = speedLabel,
-                onSeek = onSeek,
+                onScrubTo = onScrubTo,
+                onScrubEnd = onScrubEnd,
                 onToggleCc = onToggleCc,
                 onSpeed = onSpeed,
                 onExitFullscreen = onExitFullscreen,
@@ -553,7 +595,8 @@ private fun MiniPlayPause(isPlaying: Boolean, onClick: () -> Unit) {
 @Composable
 private fun PortraitProgressRow(
     state: PlayerControlsState,
-    onSeek: (Long) -> Unit,
+    onScrubTo: (Long) -> Unit,
+    onScrubEnd: () -> Unit,
     onTogglePlay: () -> Unit,
     onFullscreen: () -> Unit,
 ) {
@@ -578,8 +621,9 @@ private fun PortraitProgressRow(
         ThinSeekSlider(
             progress = progress,
             onSeekFraction = { frac ->
-                if (duration > 0) onSeek((frac * duration).toLong())
+                if (duration > 0) onScrubTo((frac * duration).toLong())
             },
+            onSeekFinished = { onScrubEnd() },
             modifier = Modifier
                 .weight(1f)
                 .padding(horizontal = 4.dp),
@@ -608,7 +652,8 @@ private fun PortraitProgressRow(
 private fun LandscapeProgressBlock(
     state: PlayerControlsState,
     speedLabel: String,
-    onSeek: (Long) -> Unit,
+    onScrubTo: (Long) -> Unit,
+    onScrubEnd: () -> Unit,
     onToggleCc: () -> Unit,
     onSpeed: () -> Unit,
     onExitFullscreen: () -> Unit,
@@ -634,8 +679,9 @@ private fun LandscapeProgressBlock(
         ThinSeekSlider(
             progress = progress,
             onSeekFraction = { frac ->
-                if (duration > 0) onSeek((frac * duration).toLong())
+                if (duration > 0) onScrubTo((frac * duration).toLong())
             },
+            onSeekFinished = { onScrubEnd() },
             modifier = Modifier
                 .weight(1f)
                 .padding(horizontal = 6.dp),
@@ -713,12 +759,14 @@ private fun LandscapeProgressBlock(
 private fun ThinSeekSlider(
     progress: Float,
     onSeekFraction: (Float) -> Unit,
+    onSeekFinished: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val value = progress.coerceIn(0f, 1f)
     Slider(
         value = value,
         onValueChange = { onSeekFraction(it.coerceIn(0f, 1f)) },
+        onValueChangeFinished = onSeekFinished,
         modifier = modifier.height(20.dp),
         colors = SliderDefaults.colors(
             thumbColor = Color.White,
