@@ -18,19 +18,19 @@
     },
     "news_list": [
       {
-        "title": "A BEST movie 111",
-        "overview": "BEST BEST BEST BEST BEST ",
-        "action": "Play now"
+        "title": "Looks quiet. Isn’t.",
+        "overview": "One glance. Instant mood. Tap in before the weekend finds you first.",
+        "action": "Dive in"
       },
       {
-        "title": "A BEST movie 222",
-        "overview": "BEST BEST BEST BEST BEST ",
-        "action": "Play now"
+        "title": "Your next obsession",
+        "overview": "New story. Big feelings. The kind you finish in one sitting.",
+        "action": "Press play"
       },
       {
-        "title": "A BEST movie 333",
-        "overview": "BEST BEST BEST BEST BEST ",
-        "action": "Play now"
+        "title": "Made for tonight",
+        "overview": "Short night. Strong story. Hit play and let the screen take over.",
+        "action": "Watch now"
       }
     ]
   },
