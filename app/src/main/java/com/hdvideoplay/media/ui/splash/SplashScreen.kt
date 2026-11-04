@@ -1,7 +1,8 @@
 package com.hdvideoplay.media.ui.splash
 
+import android.os.SystemClock
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -17,10 +18,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,6 +33,7 @@ import com.hdvideoplay.media.ui.theme.SplashProgressRed
 import com.hdvideoplay.media.ui.theme.SplashProgressTrack
 import com.hdvideoplay.media.ui.theme.VideoPlayDimens
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Cold-start splash aligned to HyperVideo GuideActivity splash
@@ -41,34 +42,49 @@ import kotlinx.coroutines.delay
  * - logo ic_login 120x120, centered and raised 50dp
  *   (center gravity + 100dp bottom margin)
  * - horizontal progress bar 6dp pinned to the bottom: 24dp side margins,
- *   100dp above the bottom edge, track #2A2A2A, fill #E21220,
- *   animated 0 -> 100% over the hold time.
+ *   100dp above the bottom edge, track #2A2A2A, fill #E21220.
+ *
+ * 进度条与广告等待窗口同步：总时长 = [holdMs] + 广告等待窗口（COLD_AD_WAIT_MS /
+ * HOT_AD_WAIT_MS，由 [targetMs] 体现）。广告就绪或退出时会提前收拢 [targetMs]，
+ * 进度条自动重定向，保证广告展示出来 / 超时跳转首页的那一刻进度条恰好走到尽头。
  */
 @Composable
 fun SplashLoadingScreen(
-    onFinished: () -> Unit,
-    holdMs: Long = 1400L,
+    startedAtElapsed: Long,
+    targetMs: StateFlow<Long>,
+    holdMs: Long,
+    /** 最短停留结束（进度条越过 hold 阶段），启动广告流程。 */
+    onHoldElapsed: () -> Unit,
     /** 组合完成、Loading 即将真正展示时回调一次（loading_show 埋点）。 */
     onShown: () -> Unit = {},
 ) {
-    var target by remember { mutableFloatStateOf(0f) }
-    val progress by animateFloatAsState(
-        targetValue = target,
-        animationSpec = tween(
-            durationMillis = holdMs.toInt().coerceAtLeast(400),
-            easing = LinearEasing,
-        ),
-        label = "splashProgress",
-    )
+    val progress = remember { Animatable(0f) }
+    val target by targetMs.collectAsState()
+
+    // 目标时刻（可重定向）：按当前进度快照校准后，线性走到 100%。
+    LaunchedEffect(target) {
+        val now = SystemClock.elapsedRealtime()
+        val total = (target - startedAtElapsed).coerceAtLeast(1L)
+        val elapsed = (now - startedAtElapsed).coerceAtLeast(0L)
+        val current = (elapsed.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+        val remaining = (target - now).coerceAtLeast(0L)
+        progress.snapTo(current)
+        progress.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(
+                durationMillis = remaining.toInt(),
+                easing = LinearEasing,
+            ),
+        )
+    }
 
     LaunchedEffect(Unit) {
         onShown()
-        target = 1f
         delay(holdMs)
-        onFinished()
+        onHoldElapsed()
     }
 
-    SplashBackdrop(progress = progress)
+    SplashBackdrop(progress = progress.value)
 }
 
 /**

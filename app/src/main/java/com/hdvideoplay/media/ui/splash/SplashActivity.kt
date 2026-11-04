@@ -30,6 +30,7 @@ import com.hdvideoplay.media.ui.theme.MediaTheme
 import com.hdvideoplay.media.ui.uninstall.UninstallEntry
 import com.hdvideoplay.media.ui.uninstall.UninstallRetentionActivity
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -71,6 +72,10 @@ class SplashActivity : ComponentActivity() {
     private var finishing = false
     private var pendingExit = false
 
+    /** 进度条目标时刻（elapsedRealtime）：初始 = 启动时刻 + hold + 广告等待窗口；广告就绪/退出时收拢。 */
+    private val progressTargetMs = MutableStateFlow(0L)
+    private var splashStartedAtElapsed = 0L
+
     private val watchdog: Runnable = object : Runnable {
         override fun run() {
             if (finishing || isFinishing || isDestroyed) return
@@ -102,11 +107,15 @@ class SplashActivity : ComponentActivity() {
             AdScheduler.load(scene)
         }
 
+        splashStartedAtElapsed = SystemClock.elapsedRealtime()
+        progressTargetMs.value = splashStartedAtElapsed + splashWindowMs()
         setContent {
             MediaTheme {
                 SplashLoadingScreen(
+                    startedAtElapsed = splashStartedAtElapsed,
+                    targetMs = progressTargetMs,
                     holdMs = if (isHotStart) HOT_HOLD_MS else COLD_HOLD_MS,
-                    onFinished = ::onSplashFinished,
+                    onHoldElapsed = ::onSplashFinished,
                     onShown = ::reportLoadingShown,
                 )
             }
@@ -260,17 +269,40 @@ class SplashActivity : ComponentActivity() {
         pendingFlow = false
         finishing = false
         pendingExit = false
-        // 重新渲染启动页（新的 LaunchedEffect → 重走 splash 动画 → startFlow）
+        // 重新渲染启动页（新的 LaunchedEffect → 重走进度条动画与 startFlow）
+        splashStartedAtElapsed = SystemClock.elapsedRealtime()
+        progressTargetMs.value = splashStartedAtElapsed + splashWindowMs()
         setContent {
             MediaTheme {
                 SplashLoadingScreen(
+                    startedAtElapsed = splashStartedAtElapsed,
+                    targetMs = progressTargetMs,
                     holdMs = if (isHotStart) HOT_HOLD_MS else COLD_HOLD_MS,
-                    onFinished = ::onSplashFinished,
+                    onHoldElapsed = ::onSplashFinished,
                     onShown = ::reportLoadingShown,
                 )
             }
         }
         requestNotificationThenProceed()
+    }
+
+    /** 进度条总时长：最短停留 + 广告等待窗口（与 COLD/HOT_AD_WAIT_MS 同步）。 */
+    private fun splashWindowMs(): Long =
+        (if (isHotStart) HOT_HOLD_MS else COLD_HOLD_MS) +
+            (if (isHotStart) HOT_AD_WAIT_MS else COLD_AD_WAIT_MS)
+
+    /** 广告即将展示：进度条目标收拢到此刻（留 [PROGRESS_SHOW_BUFFER_MS] 缓冲），广告弹出时正好走满。 */
+    private fun completeProgressSoon() {
+        val now = SystemClock.elapsedRealtime()
+        val floor = splashStartedAtElapsed + (if (isHotStart) HOT_HOLD_MS else COLD_HOLD_MS)
+        progressTargetMs.value = now.coerceAtLeast(floor) + PROGRESS_SHOW_BUFFER_MS
+    }
+
+    /** 立即退出（无广告可展示）：进度条立即走满，与跳转同步。 */
+    private fun completeProgressNow() {
+        val now = SystemClock.elapsedRealtime()
+        val floor = splashStartedAtElapsed + (if (isHotStart) HOT_HOLD_MS else COLD_HOLD_MS)
+        progressTargetMs.value = now.coerceAtLeast(floor)
     }
 
     private fun startFlow() {
@@ -309,6 +341,9 @@ class SplashActivity : ComponentActivity() {
                     AdScheduler.coldSplashLocation().jsonKey,
                     waited,
                 )
+            } else {
+                // 广告就绪：进度条收拢到此刻，广告弹出时正好走到尽头
+                completeProgressSoon()
             }
             val started = AdScheduler.emit(
                 location = AdScheduler.coldSplashLocation(),
@@ -332,6 +367,7 @@ class SplashActivity : ComponentActivity() {
                     AdLocation.SPLASH_HOT.jsonKey,
                     "interval_not_met",
                 )
+                completeProgressNow()
                 if (epoch == startupEpoch) requestExit()
                 return@launch
             }
@@ -342,6 +378,8 @@ class SplashActivity : ComponentActivity() {
                 if (AdScheduler.isReadyFor(AdLocation.SPLASH_HOT)) {
                     awaitResumed()
                     if (epoch != startupEpoch || !isActive || isFinishing || isDestroyed) return@launch
+                    // 广告就绪：进度条收拢到此刻，广告弹出时正好走到尽头
+                    completeProgressSoon()
                     var adStarted = false
                     val started = AdScheduler.emit(
                         location = AdLocation.SPLASH_HOT,
@@ -444,6 +482,8 @@ class SplashActivity : ComponentActivity() {
         private const val POLL_MS = 100L
         private const val WATCHDOG_MS = 12_000L
         private const val WATCHDOG_POLL_MS = 500L
+        /** 广告就绪后进度条走满的展示缓冲（覆盖 awaitResumed/emit 间隙）。 */
+        private const val PROGRESS_SHOW_BUFFER_MS = 150L
 
         /** Set for the lifetime of the visible splash; HotStartManager reads it. */
         @Volatile

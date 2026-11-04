@@ -112,3 +112,11 @@
 - 数据层（提交 9507fe0）：NotificationContent 增加 mediaId/posterUrl；NotificationContentRepository 增加动态池（home_data 展平→过滤有 mediaId/标题/封面的条目→随机 5 条缓存 1h→每次随机且避免连续重复），失败回退静态池；PosterFetcher（OkHttp 下载、128px 小图/360px 大图双解码、按 URL 进程内缓存≤8 条、5s 超时失败回退固定图标）；NotificationContentRepositoryTest（fake MediaApi：字段映射/单条去重/TTL 复用与过期重拉/失败回退）。
 - 构建与落页（本提交）：NewsNotificationViewBinder 增加 poster 参数（封面优先、固定图标兜底）；HintUtil 发送链路透传封面（普通与 banner 会话两条路径）；通知点击 intent 携带 EXTRA_MEDIA_ID；SplashActivity.doExit 增加 mediaId 分支→DetailActivity.createIntent(autoPlay=true)。FCM 通知样式与点击行为不变。
 - 验证：:app:assembleDebug + :app:testDebugUnitTest 通过。设备待办：真机验证封面显示与点击→开屏→详情页自动播放链路。
+## 扩展：启动页进度条与广告等待窗口同步（2026-11-04）
+
+需求：启动页底部进度条最大值与 COLD_AD_WAIT_MS / HOT_AD_WAIT_MS 同步——广告展示出来或超时跳转首页的那一刻，进度条恰好走到尽头。
+
+- SplashLoadingScreen 改为「可重定向进度」：总时长 = hold + 等待窗口（splashWindowMs()，由 COLD/HOT_AD_WAIT_MS 常量计算，改常量自动同步）；SplashActivity 通过 MutableStateFlow<Long> 下发目标时刻（elapsedRealtime），composable 用 Animatable 按当前进度快照校准后线性走满；目标收拢时自动加速（重定向），目标已过则立即走满。
+- 收拢时机：冷/热流程检测到广告就绪 → completeProgressSoon()（收拢到此刻 + 150ms 展示缓冲，覆盖 awaitResumed/emit 间隙）；热启动被频控拦截 → completeProgressNow()（立即走满与跳转同步）；等待窗口超时退出 → 无需处理（进度条天然在窗口终点走满）。
+- 保留原有语义：hold 最短停留（1400ms）后触发 onHoldElapsed（原 onSplashFinished）启动广告流程；loading_show 埋点、E12/E13 埋点、重启流程（restartStartupFlow 重置 startedAt 与目标）均不受影响。
+- 验证：:app:assembleDebug + :app:testDebugUnitTest 通过；设备待办：观察冷启动（最长约 11.9s）与热启动（最长约 11.6s）进度条是否在广告弹出/跳转瞬间走满。
