@@ -15,7 +15,8 @@
       "ring_on": 0,
       "banner_on": 1,
       "banner_time": 10
-    }
+    },
+    "news_list": []
   },
   "hd_ad_config": {
     "hd_ad_interval": 1,

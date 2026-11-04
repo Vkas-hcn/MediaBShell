@@ -7,6 +7,23 @@ import kotlinx.serialization.Serializable
 data class NoticeConfig(
     @SerialName("copop_config") val pop: PopConfig = PopConfig(),
     @SerialName("banner_notify") val banner: BannerNotifyConfig = BannerNotifyConfig(),
+    /** 服务端下发的通知内容列表（按序轮换；media_id<=0 的条目走客户端随机池）。 */
+    @SerialName("news_list") val newsList: List<NoticeNewsItem> = emptyList(),
+)
+
+/**
+ * 服务端下发的一条通知内容：
+ * - media_id <=0 视为未填 → 客户端随机选一部电影和封面（与现有随机池一致）；
+ * - 标题/简介/海报缺失时按 media_id 调详情接口补全；
+ * - 海报始终缺失时通知回退固定图标。
+ */
+@Serializable
+data class NoticeNewsItem(
+    @SerialName("media_id") val mediaId: Int = 0,
+    val title: String = "",
+    val overview: String = "",
+    @SerialName("poster_url") val posterUrl: String = "",
+    val action: String = "",
 )
 
 @Serializable
