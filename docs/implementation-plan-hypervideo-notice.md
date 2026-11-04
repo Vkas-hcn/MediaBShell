@@ -141,3 +141,12 @@
 - NotificationContentRepository 轮换游标持久化到 notification_copy_rotation/remote_index（跨进程累计；列表变更时按新长度取模对齐）。
 
 注意：按已确认口径，media_id=0 的条目会忽略下发文案与封面、随机选片；要展示指定文案/封面必须填 media_id（poster_url 可省，缺省时按 media_id 查详情补全）。
+### news_list 方案调整：纯文案下发（2026-11-04）
+
+需求变更：封面获取不可靠，去除 media_id/poster_url 字段；通知发出时仍随机选一部影片及其封面（与之前一致），点击跳转该影片详情页并自动播放；仅保留 title/overview/action 的动态下发。
+
+- DTO：NoticeNewsItem 仅保留 title/overview/action（旧 payload 携带 media_id/poster_url 时按未知字段忽略，兼容）。
+- 选取：NotificationContentRepository 先取随机影片（home_data 池 → 静态兜底，封面/媒体 ID/点击落页与之前完全一致），再用轮换的下发文案覆盖 title/overview/action；空字段回退随机影片原文案；删除按 media_id 查详情补海报的逻辑。
+- 本地 hd_config.json：news_list 改为纯文案条目（示例 3 组）；空列表=不覆盖文案。
+- 点击链路不变：随机影片的 mediaId → EXTRA_MEDIA_ID → 启动页开屏广告 → DetailActivity(autoPlay=true)。
+- 验证：:app:assembleDebug + :app:testDebugUnitTest 通过（单测覆盖：文案覆盖保留随机影片身份、空字段回退、文案轮换）。
