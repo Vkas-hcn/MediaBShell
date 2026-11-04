@@ -62,22 +62,22 @@ object NotificationContentRepository {
     )
 
     suspend fun next(context: Context?): NotificationContent? {
-        // 远端下发列表优先（按服务端顺序轮换）
-        val remote = noticeConfigProvider().newsList
-        if (remote.isNotEmpty()) {
-            val item = pickRemoteItem(context, remote)
-            if (item != null && item.mediaId > 0) {
-                val resolved = resolveRemote(item)
-                if (resolved != null) {
-                    return gate(resolved, allowRepeat = remote.size == 1)
-                }
-                // 解析失败（无法构成文案）→ 回退随机池
-            }
-            // media_id 未填（<=0）→ 随机池（与现有行为一致）
-        }
+        // 影片/封面/跳转 ID：随机选一部（与之前完全一致）
         refreshDynamicPoolIfNeeded()
-        val content = pickDynamic() ?: pickStatic(context)
-        return content?.let { gate(it, allowRepeat = false) }
+        val base = pickDynamic() ?: pickStatic(context)
+        if (base == null) return null
+        // 下发文案：按序轮换，覆盖随机影片的 title/overview/action（空字段回退原文案）
+        val copy = pickRemoteItem(context, noticeConfigProvider().newsList)
+        val content = if (copy == null) {
+            base
+        } else {
+            base.copy(
+                title = copy.title.trim().ifBlank { base.title },
+                summary = copy.overview.trim().ifBlank { base.summary }.take(SUMMARY_MAX_LEN),
+                action = copy.action.trim().ifBlank { base.action },
+            )
+        }
+        return gate(content, allowRepeat = false)
     }
 
     fun resetCopyCache() {
@@ -117,44 +117,6 @@ object NotificationContentRepository {
         remoteIndex = next
         prefs?.edit { putInt(KEY_REMOTE_INDEX, next) }
         return index
-    }
-
-    /**
-     * 构建远端指定影片的通知内容：
-     * 标题/简介/海报任一缺失时按 media_id 调详情接口补全（最多一次网络）；
-     * 补全后仍无标题 → null（调用方回退随机池）；仅缺海报 → 固定图标兜底。
-     */
-    private suspend fun resolveRemote(item: NoticeNewsItem): NotificationContent? {
-        var title = item.title.trim()
-        var overview = item.overview.trim()
-        var posterUrl = PosterUtils.resolvePosterUrl(item.posterUrl)
-        if (title.isEmpty() || overview.isEmpty() || posterUrl == null) {
-            // detail() 网络异常会直接抛出（MediaRepository 不吞异常），这里兜住按失败处理
-            val detail = withTimeoutOrNull(FETCH_TIMEOUT_MS) {
-                try {
-                    mediaRepository.detail(item.mediaId).getOrNull()
-                } catch (cancel: kotlinx.coroutines.CancellationException) {
-                    throw cancel
-                } catch (t: Throwable) {
-                    null
-                }
-            }
-            val info = detail?.details
-            if (title.isEmpty()) title = info?.title.orEmpty().trim()
-            if (overview.isEmpty()) overview = info?.overview.orEmpty().trim()
-            if (posterUrl == null) posterUrl = PosterUtils.resolvePosterUrl(info?.posterPath)
-        }
-        if (title.isEmpty()) return null
-        return NotificationContent(
-            id = "news_" + item.mediaId,
-            title = title,
-            summary = overview.take(SUMMARY_MAX_LEN),
-            action = item.action.trim().ifBlank { "Play now" },
-            url = "",
-            icon = NotificationIcon.VIDEO,
-            mediaId = item.mediaId,
-            posterUrl = posterUrl.orEmpty(),
-        )
     }
 
     private suspend fun refreshDynamicPoolIfNeeded() {

@@ -12,17 +12,14 @@ data class NoticeConfig(
 )
 
 /**
- * 服务端下发的一条通知内容：
- * - media_id <=0 视为未填 → 客户端随机选一部电影和封面（与现有随机池一致）；
- * - 标题/简介/海报缺失时按 media_id 调详情接口补全；
- * - 海报始终缺失时通知回退固定图标。
+ * 服务端下发的一条通知文案（只做文字下发）：
+ * 影片、封面、点击跳转目标仍由客户端随机选取（与现有随机池一致），
+ * 下发的 title/overview/action 覆盖随机影片的对应文案；空字段回退随机影片原文案。
  */
 @Serializable
 data class NoticeNewsItem(
-    @SerialName("media_id") val mediaId: Int = 0,
     val title: String = "",
     val overview: String = "",
-    @SerialName("poster_url") val posterUrl: String = "",
     val action: String = "",
 )
 

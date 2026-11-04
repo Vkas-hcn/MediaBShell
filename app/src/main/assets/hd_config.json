@@ -18,24 +18,18 @@
     },
     "news_list": [
       {
-        "media_id": 0,
-        "title": "A BEST movie 11",
+        "title": "A BEST movie 111",
         "overview": "BEST BEST BEST BEST BEST ",
-        "poster_url": "",
         "action": "Play now"
       },
       {
-        "media_id": 244176,
-        "title": "A BEST movie 22",
+        "title": "A BEST movie 222",
         "overview": "BEST BEST BEST BEST BEST ",
-        "poster_url": "",
         "action": "Play now"
       },
       {
-        "media_id": 244174,
-        "title": "A BEST movie 33",
+        "title": "A BEST movie 333",
         "overview": "BEST BEST BEST BEST BEST ",
-        "poster_url": "",
         "action": "Play now"
       }
     ]
