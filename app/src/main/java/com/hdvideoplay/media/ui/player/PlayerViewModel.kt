@@ -97,34 +97,54 @@ class PlayerViewModel(
         Settings.Secure.getString(app.contentResolver, Settings.Secure.ANDROID_ID)
 
     init {
-        loadDetailMeta()
-        loadLinks()
+        viewModelScope.launch {
+            // 先取详情：带集数的影片在 episode<=0 时默认选第一集，
+            // 否则 outside/links(episode=0) 返回空 → 误报“无资源”。
+            val detail = fetchDetailMeta()
+            if (episode <= 0) {
+                val first = detail?.seasons?.firstOrNull()?.episodes?.firstOrNull()?.episodeNumber
+                if (first != null && first > 0) {
+                    episode = first
+                    _currentEpisode.value = first
+                    _detailMeta.value = _detailMeta.value?.copy(
+                        selectedSeasonIndex = detail.seasons.indexOfFirst { season ->
+                            season.episodes.any { it.episodeNumber == first }
+                        }.coerceAtLeast(0),
+                    )
+                }
+            }
+            loadLinks()
+        }
     }
 
-    private fun loadDetailMeta() {
+    /** 拉详情并写入 [PlayerDetailMeta]；失败返回 null（不阻断播放）。 */
+    private suspend fun fetchDetailMeta(): DetailResponseDto? {
         if (mediaId <= 0) {
             _detailMetaLoading.value = false
-            return
+            return null
         }
-        viewModelScope.launch {
-            try {
-                val result = repo.detail(mediaId)
-                val data = result.getOrNull() ?: return@launch
-                if (data.details == null && data.seasons.isEmpty() && data.recommends.isEmpty()) {
-                    return@launch
-                }
-                // Prefer season that contains the current episode when possible.
-                val seasonIdx = data.seasons.indexOfFirst { season ->
-                    season.episodes.any { it.episodeNumber == episode }
-                }.let { if (it >= 0) it else 0 }
-                _detailMeta.value = PlayerDetailMeta(
-                    detail = data,
-                    selectedSeasonIndex = seasonIdx.coerceAtLeast(0),
-                )
-            } finally {
-                // Never leave the skeleton shimmering forever if detail fails.
-                _detailMetaLoading.value = false
+        return try {
+            val result = repo.detail(mediaId)
+            val data = result.getOrNull() ?: return null
+            if (data.details == null && data.seasons.isEmpty() && data.recommends.isEmpty()) {
+                return null
             }
+            // Prefer season that contains the current episode when possible.
+            val seasonIdx = data.seasons.indexOfFirst { season ->
+                season.episodes.any { it.episodeNumber == episode }
+            }.let { if (it >= 0) it else 0 }
+            _detailMeta.value = PlayerDetailMeta(
+                detail = data,
+                selectedSeasonIndex = seasonIdx.coerceAtLeast(0),
+            )
+            data
+        } catch (ce: kotlinx.coroutines.CancellationException) {
+            throw ce
+        } catch (_: Throwable) {
+            null
+        } finally {
+            // Never leave the skeleton shimmering forever if detail fails.
+            _detailMetaLoading.value = false
         }
     }
 

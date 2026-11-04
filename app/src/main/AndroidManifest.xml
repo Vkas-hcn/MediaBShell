@@ -22,7 +22,9 @@
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="ca-app-pub-3940256099942544~3347511713" />
-
+        <meta-data
+            android:name="com.google.android.gms.ads.flag.NATIVE_AD_DEBUGGER_ENABLED"
+            android:value="false" />
         <!-- play-services-ads-lite 与 play-services-measurement-api 的 AD_SERVICES_CONFIG 冲突，
              以广告侧资源为准（firebase-analytics 固定旧版引入）。 -->
         <property

@@ -162,10 +162,21 @@ class DetailViewModel(
         TrackEvents.detailView(mediaId, autoPlay, from, moduleId)
     }
 
+    /** 默认集数：显式指定优先；剧集取第一季第一集；电影为 0。 */
+    private fun resolveDefaultEpisode(): Int {
+        if (initialEpisode > 0) return initialEpisode
+        val model = (_state.value as? UiState.Success)?.data ?: return initialEpisode
+        val seasons = model.seasons
+        if (seasons.isEmpty()) return 0
+        return seasons.firstOrNull()?.episodes?.firstOrNull()?.episodeNumber ?: 1
+    }
+
     /** Load, probe all lines concurrently, then publish valid-first ordering. */
     private suspend fun loadLinks() {
+        // outside/links(episode=0) 对剧集返回空 → 必须用第一集，避免“无资源”。
+        val episode = resolveDefaultEpisode()
         val linksResult = try {
-            repo.outsideLinks(mediaId, initialEpisode)
+            repo.outsideLinks(mediaId, episode)
         } catch (ce: CancellationException) {
             throw ce
         } catch (t: Throwable) {
