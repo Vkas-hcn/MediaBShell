@@ -21,7 +21,7 @@
         <!-- AdMob App ID (Google test ID — dev branch only). Acceptance: show/waterfall/dismiss only — never click CTAs. -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-3940256099942544~3347511713" />
+            android:value="ca-app-pub-1725671068291893~2570094997" />
         <meta-data
             android:name="com.google.android.gms.ads.flag.NATIVE_AD_DEBUGGER_ENABLED"
             android:value="false" />
