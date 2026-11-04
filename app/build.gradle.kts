@@ -15,7 +15,7 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.hd.videoplay.media.debug"
+        applicationId = "com.hyperideo.hdvideoplayer"
         minSdk = 24
         targetSdk = 35
         versionCode = 5
