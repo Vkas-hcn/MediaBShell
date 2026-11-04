@@ -14,7 +14,7 @@ import kotlinx.coroutines.launch
  * 启动期埋点任务（通用规范 E01 / E23 / E24）：
  * - E01 app_first_open：BI 已由 TrackSDK 自动上报（含规范全部必带参数），这里补 adjust/firebase；
  * - E24 retention_d1/d7/d14/d30：安装后第 N 天回访各报一次（按自然日）；
- * - E23 activated：进入 App 即按买量用户处理，每设备只报一次、仅出 BI。
+ * - E23 activated：成功进入 App 即上报（每设备一次，BI/Firebase/Adjust）。
  */
 object BootTracking {
     private const val TAG = "BootTracking"
@@ -22,20 +22,19 @@ object BootTracking {
 
     fun run() {
         scope.launch {
+            // E23 activated：成功进入 App 即上报（每设备一次；is_first_install 由参数携带）。
+            AttributionState.evaluateOnce(MediaApp.get())
             // E01：等 SDK 内部 install referrer 拉取（超时 1.5s）完成后再取数。
             delay(3_000)
             TrackEvents.appFirstOpenExternalsIfFirstInstall()
             // E24：留存节点判定。
             TrackEvents.retentionCheckOnce()
-            // E23：买量判定（进入 App 即按买量；幂等一次性）。
-            delay(5_000)
-            AttributionState.evaluateOnce(MediaApp.get())
         }
     }
 }
 
 /**
- * E23 买量判定：进入 App 一律按买量用户处理，上报 activated（每设备一次、仅 BI）。
+ * E23 activated：成功进入 App 上报一次（每设备一次；BI/Firebase/Adjust）。
  */
 object AttributionState {
     private const val TAG = "AttributionState"

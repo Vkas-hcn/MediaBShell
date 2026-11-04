@@ -48,9 +48,10 @@ class MediaApp : Application() {
             .onFailure { Log.w(TAG, "FCM runtime ready failed", it) }
         DispatchManager.init(this)
         beForTool.launchRefData()
-        // 启动期埋点任务：E01 补出口（adjust/firebase）+ E24 留存 + E23/E25 归因判定。
-        BootTracking.run()
+        // Adjust 先初始化：activated 等事件上报需要 SDK 就绪。
         initAdJust(this)
+        // 启动期埋点任务：E23 activated + E01 补出口（adjust/firebase）+ E24 留存。
+        BootTracking.run()
     }
 
     private fun initTrackSdk() {

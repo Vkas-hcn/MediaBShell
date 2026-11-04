@@ -21,7 +21,7 @@ import com.hdvideoplay.media.MediaApp
  * 平台原则：
  * - BI：TrackSDK（MediaApp 已初始化），业务需求事件（loading_show 等 17 个）+ 通用规范事件；
  * - Firebase Analytics：loading_show / home_view / 通知链路 / 广告链路 / retention 等指定事件；
- * - Adjust：notification_agree（ryg9dc）与规范事件的占位 token（【待填】）。
+ * - Adjust：activated（7aeie7）、notification_agree（ryg9dc）与规范事件的占位 token（【待填】）。
  *
  * 每个平台调用独立 runCatching：任一平台失败不影响其他平台，也不影响业务流程。
  */
@@ -123,10 +123,13 @@ object TrackEvents {
     const val END_ERROR = "error"
 
     /** Adjust 事件识别码：文档未提供的一律占位（规范 1.2 硬规则 4），交付前由运营替换。 */
-    const val ADJUST_TOKEN_PLACEHOLDER = "【待填】"
+    const val ADJUST_TOKEN_PLACEHOLDER = ""
 
     /** Adjust notification_agree 事件识别码（需求 6.2）。 */
     private const val ADJUST_AGREE_TOKEN = "ryg9dc"
+
+    /** Adjust activated 事件识别码（成功进入 B 面）。 */
+    private const val ADJUST_ACTIVATED_TOKEN = "7aeie7"
 
     // ---- 各平台底层上报（相互独立，互不影响） ----
 
@@ -173,11 +176,15 @@ object TrackEvents {
     }
 
     /**
-     * E23 activated（买量用户标记）：仅出 BI，每设备只报一次。
-     * 判定与一次性去重由 [AttributionState.evaluateOnce] 负责，本方法只做 BI 上报。
+     * E23 activated：成功进入 B 面（本 App）时上报，每设备一次。
+     * 参数 is_first_install；出口 BI、Firebase、Adjust（7aeie7）。
+     * 一次性去重由 [AttributionState.evaluateOnce] 负责。
      */
     fun activated() {
-        bi(ACTIVATED, null)
+        val first = isFirstInstall()
+        bi(ACTIVATED, mapOf(P_IS_FIRST_INSTALL to first))
+        firebase(ACTIVATED, mapOf(P_IS_FIRST_INSTALL to (if (first) 1 else 0)))
+        adjust(ACTIVATED, ADJUST_ACTIVATED_TOKEN)
     }
 
     /** E19 reactivation_landing：拉活打开 App 后落到目标页（source + landing_page + pos_id 可空）。 */
