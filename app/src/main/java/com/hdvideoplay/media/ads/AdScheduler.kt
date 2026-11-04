@@ -373,6 +373,23 @@ object AdScheduler : Application.ActivityLifecycleCallbacks {
         isReady(AdScenes.COLD_OPEN) ||
             isReady(AdScenes.HOT_OPEN)
 
+    /**
+     * 从 normal_1/normal_2 缓存中取出（消耗）一条优先级最低的原生广告，用于内嵌展示。
+     * 广告单元 ID 来自配置；消耗后按 refill_on_consume 自动补加载。无可用广告返回 null。
+     */
+    fun takeInlineNative(): CachedAd? {
+        var best: Pair<String, CachedAd>? = null
+        for (scene in listOf(AdScenes.NORMAL_1, AdScenes.NORMAL_2)) {
+            val entry = controller(scene).peekLowestPriority(AdFormat.NATIVE) ?: continue
+            if (best == null || entry.node.priority < best.second.node.priority) {
+                best = scene to entry
+            }
+        }
+        if (best == null) return null
+        controller(best.first).consume(best.second)
+        return best.second
+    }
+
     fun coldSplashLocation(): AdLocation =
         if (wasColdSplashShownToday()) AdLocation.SPLASH_COLD else AdLocation.FIRST_SPLASH_COLD
 

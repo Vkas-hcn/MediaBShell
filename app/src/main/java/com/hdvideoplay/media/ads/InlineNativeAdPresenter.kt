@@ -9,50 +9,34 @@ import com.google.android.gms.ads.nativead.AdChoicesView
 import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.nativead.NativeAdView
 import com.hdvideoplay.media.R
+import com.hdvideoplay.media.track.AdTrackingHelper
 
 /**
- * 内联小原生广告展示器：把 NativeAd 绑定到宿主容器内嵌展示（非全屏，和 HyperVideo 一致）。
- *
- * - 复用现有 [NativeAdLoader] 加载（含请求/填充/失败埋点与超时），只做「加载→绑定→内嵌展示」；
- * - 同一容器同一时刻最多展示一条广告；重复调用不会重复绑定；
- * - [release] 之后到达的回调全部忽略并销毁实例。
+ * 内联小原生广告展示器：复用 normal_1/normal_2 已缓存的原生广告（单元 ID 来自配置），
+ * 绑定到宿主容器内嵌展示（非全屏，和 HyperVideo 一致）。不单独加载广告位。
  */
-class InlineNativeAdPresenter(
-    private val host: ViewGroup,
-    private val unitId: String,
-    private val slot: String = "uninstall_retention",
-) {
+class InlineNativeAdPresenter(private val host: ViewGroup) {
 
-    private val loader = NativeAdLoader()
     private var displayedAd: NativeAd? = null
     private var displayedView: NativeAdView? = null
     private var released = false
-    private var loading = false
 
-    /** 已展示则跳过；否则请求一次加载并内嵌展示。 */
+    /** 从 normal_1/normal_2 缓存取一条原生广告内嵌展示；无缓存则保持隐藏。 */
     fun show() {
         if (released) return
         if (displayedAd != null && displayedView?.parent === host) return
-        if (loading) return
-        loading = true
-        val node = HdAdNode(platform = "admob", format = "native", unitId = unitId, priority = 1)
-        loader.load(host.context, node, 30_000L, slot) { result ->
-            loading = false
-            if (released) return@load
-            when (result) {
-                is AdLoadResult.Success -> bind(result.entry.payload as? NativeAd)
-                is AdLoadResult.Failure -> {
-                    AdLogger.loadFailed(slot, "native", unitId, result.reason)
-                    host.visibility = View.GONE
-                }
-            }
+        val entry = AdScheduler.takeInlineNative()
+        val ad = entry?.payload as? NativeAd
+        if (entry == null || ad == null) {
+            host.visibility = View.GONE
+            return
         }
+        bind(ad, entry)
     }
 
     /** 宿主销毁时调用：销毁实例并丢弃在途回调。 */
     fun release() {
         released = true
-        loading = false
         displayedAd?.destroy()
         displayedAd = null
         displayedView = null
@@ -60,8 +44,7 @@ class InlineNativeAdPresenter(
         host.visibility = View.GONE
     }
 
-    private fun bind(ad: NativeAd?) {
-        if (ad == null || released) return
+    private fun bind(ad: NativeAd, entry: CachedAd) {
         val view = LayoutInflater.from(host.context)
             .inflate(R.layout.item_native_ad_small, host, false) as NativeAdView
 
@@ -88,7 +71,20 @@ class InlineNativeAdPresenter(
         }
         view.findViewById<AdChoicesView>(R.id.ad_choices)?.let { view.adChoicesView = it }
 
-        // 旧实例在广告位取新实例时销毁，保证同一时刻只有一条有效展示。
+        // 收入：真实曝光由 AdMob 触发 OnPaidEvent → BI/Firebase + Adjust。
+        ad.setOnPaidEventListener { adValue ->
+            AdTrackingHelper.trackAdImpressionRevenueMicros(
+                host.context,
+                adValue,
+                AdTrack.adTypeOf(entry.format),
+                "uninstall_retention",
+                adId = entry.adId,
+                adSource = AdTrack.adSourceOf(ad.responseInfo),
+                sdkName = "AdMob",
+            )
+            AdTrackingHelper.trackAdRevenueAdjust(adValue, ad.responseInfo, entry.node.unitId)
+        }
+
         displayedAd?.destroy()
         host.removeAllViews()
         host.addView(view)
@@ -96,6 +92,6 @@ class InlineNativeAdPresenter(
         displayedAd = ad
         displayedView = view
         view.setNativeAd(ad)
-        AdLogger.loadSuccess(slot, "native", unitId)
+        AdLogger.loadSuccess("uninstall_retention", "native", entry.node.unitId)
     }
 }

@@ -42,7 +42,6 @@ class UninstallRetentionActivity : ComponentActivity() {
 
         inlineAd = InlineNativeAdPresenter(
             findViewById<ViewGroup>(R.id.uninstall_ad_container),
-            UNINSTALL_NATIVE_UNIT,
         ).also { it.show() }
     }
 
@@ -114,8 +113,4 @@ class UninstallRetentionActivity : ComponentActivity() {
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).roundToInt()
-
-    companion object {
-        private const val UNINSTALL_NATIVE_UNIT = "ca-app-pub-3940256099942544/2247696110"
-    }
 }
