@@ -89,6 +89,11 @@ class SplashActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // 重复点击同一条通知：直接关闭本次启动页，不重复走开屏广告/详情页跳转
+        if (markNotificationClickConsumed(intent)) {
+            finish()
+            return
+        }
         enableEdgeToEdge()
         isShowing = true
         reportNotificationClickIfNeeded(intent)
@@ -134,6 +139,8 @@ class SplashActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        // 重复点击同一条通知：忽略本次（第一次点击已处理，避免重走开屏/详情）
+        if (markNotificationClickConsumed(intent)) return
         reportNotificationClickIfNeeded(intent)
         if (intent.getBooleanExtra(EXTRA_HOT_START, false)) {
             if (isFinishing || isDestroyed) {
@@ -181,6 +188,21 @@ class SplashActivity : ComponentActivity() {
             return
         }
         startFlow()
+    }
+
+    /**
+     * 本地新闻通知点击进程级去重：同一通知 ID 只处理第一次点击。
+     * 返回 true 表示本次是重复点击，调用方应忽略（不再走开屏广告/详情页）。
+     */
+    private fun markNotificationClickConsumed(intent: Intent): Boolean {
+        val showType = intent.getIntExtra(HintUtil.CO_SHOW_TYPE, -1)
+        val notificationId = intent.getIntExtra(HintUtil.CO_NOTIFICATION_ID, -1)
+        if (showType < 0 || notificationId < 0) return false
+        synchronized(clickLock) {
+            if (notificationId == handledNotificationClickId) return true
+            handledNotificationClickId = notificationId
+            return false
+        }
     }
 
     /**
@@ -522,6 +544,11 @@ class SplashActivity : ComponentActivity() {
         /** 进程级启动流程代数：新实例/热启动递增，旧广告回调按代数丢弃。 */
         @Volatile
         private var startupEpoch = 0
+
+        /** 已处理的本地通知点击 ID（进程级去重，同一条通知连点只处理第一次）。 */
+        @Volatile
+        private var handledNotificationClickId = -1
+        private val clickLock = Any()
 
         /** 进程被系统新建时为 false；第一次进入启动页后置 true（对齐 HyperVideo）。 */
         private var processAlreadyEntered = false
