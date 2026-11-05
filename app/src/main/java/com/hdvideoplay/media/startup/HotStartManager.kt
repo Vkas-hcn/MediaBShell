@@ -61,6 +61,7 @@ object HotStartManager : DefaultLifecycleObserver, Application.ActivityLifecycle
         val shouldLaunch = hotStartArmed && hasSeenForeground
         hotStartArmed = false
         hasSeenForeground = true
+        Log.i(TAG, "NAV onStart shouldLaunch=" + shouldLaunch + " armedWas=" + shouldLaunch)
         if (!shouldLaunch) return
         mainHandler.post {
             if (!processInForeground) return@post
@@ -125,6 +126,7 @@ object HotStartManager : DefaultLifecycleObserver, Application.ActivityLifecycle
         val current = topActivity?.get()
             ?.takeIf { !it.isFinishing && !it.isDestroyed }
         if (current is SplashActivity) return
+        Log.i(TAG, "NAV launchPlainHotStart current=" + (current?.javaClass?.simpleName ?: "null"))
         val intent = SplashActivity.createHotStartIntent(app)
         runCatching {
             if (current != null) current.startActivity(intent)

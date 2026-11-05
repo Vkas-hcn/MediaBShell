@@ -89,8 +89,15 @@ class SplashActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Log.i(TAG, "NAV onCreate instance=" + hashCode() +
+            " mediaId=" + intent.getIntExtra(EXTRA_MEDIA_ID, -1) +
+            " showType=" + intent.getIntExtra(HintUtil.CO_SHOW_TYPE, -1) +
+            " notifId=" + intent.getIntExtra(HintUtil.CO_NOTIFICATION_ID, -1) +
+            " hot=" + isHotStart + " retMain=" + isReturnToMain +
+            " flags=" + Integer.toHexString(intent.flags))
         // 重复点击同一条通知：直接关闭本次启动页，不重复走开屏广告/详情页跳转
         if (markNotificationClickConsumed(intent)) {
+            Log.i(TAG, "NAV onCreate DUP — finish instance=" + hashCode())
             finish()
             return
         }
@@ -139,8 +146,16 @@ class SplashActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        Log.i(TAG, "NAV onNewIntent instance=" + hashCode() +
+            " finishing=" + isFinishing + " destroyed=" + isDestroyed +
+            " mediaId=" + intent.getIntExtra(EXTRA_MEDIA_ID, -1) +
+            " notifId=" + intent.getIntExtra(HintUtil.CO_NOTIFICATION_ID, -1) +
+            " hot=" + intent.getBooleanExtra(EXTRA_HOT_START, false))
         // 重复点击同一条通知：忽略本次（第一次点击已处理，避免重走开屏/详情）
-        if (markNotificationClickConsumed(intent)) return
+        if (markNotificationClickConsumed(intent)) {
+            Log.i(TAG, "NAV onNewIntent DUP — ignore instance=" + hashCode())
+            return
+        }
         reportNotificationClickIfNeeded(intent)
         if (intent.getBooleanExtra(EXTRA_HOT_START, false)) {
             if (isFinishing || isDestroyed) {
@@ -199,8 +214,12 @@ class SplashActivity : ComponentActivity() {
         val notificationId = intent.getIntExtra(HintUtil.CO_NOTIFICATION_ID, -1)
         if (showType < 0 || notificationId < 0) return false
         synchronized(clickLock) {
-            if (notificationId == handledNotificationClickId) return true
+            if (notificationId == handledNotificationClickId) {
+                Log.i(TAG, "NAV click DUP notifId=" + notificationId + " handled=" + handledNotificationClickId)
+                return true
+            }
             handledNotificationClickId = notificationId
+            Log.i(TAG, "NAV click FIRST notifId=" + notificationId)
             return false
         }
     }
@@ -454,6 +473,7 @@ class SplashActivity : ComponentActivity() {
         // 避免 autoPlay 的 Player 压住详情页后 singleTop 失效、再压一个重复详情页。
         val mediaId = intent.getIntExtra(EXTRA_MEDIA_ID, -1)
         if (mediaId > 0) {
+            Log.i(TAG, "NAV doExit → DetailActivity mediaId=" + mediaId + " instance=" + hashCode())
             startActivity(
                 DetailActivity.createIntent(
                     this,

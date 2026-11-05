@@ -49,6 +49,8 @@ class DetailActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         createdFromSavedState = savedInstanceState != null
+        Log.i("DetailActivity", "NAV onCreate instance=" + hashCode() +
+            " mediaId=" + mediaIdOf() + " savedState=" + (savedInstanceState != null))
         enableEdgeToEdge()
         // Load ≠ Show: enter Detail only preloads normal pools; show on return_ad.
         AdScheduler.preload(AdScenes.NORMAL_1)
@@ -85,8 +87,17 @@ class DetailActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        val newMediaId = mediaIdOf(intent)
+        val newEpisode = episodeOf(intent)
+        // 同一个视频的重复触发（重复点击通知等）：不重建，避免详情页重新加载 + autoPlay 二次跳转
+        val sameTarget = newMediaId == mediaIdOf() && newEpisode == episodeOf()
         setIntent(intent)
-        Log.i("DetailActivity", "onNewIntent mediaId=${mediaIdOf(intent)} — recreate")
+        Log.i(
+            "DetailActivity",
+            "onNewIntent mediaId=" + newMediaId + " ep=" + newEpisode +
+                " same=" + sameTarget + (if (sameTarget) " → ignore" else " → recreate"),
+        )
+        if (sameTarget) return
         recreate()
     }
 
