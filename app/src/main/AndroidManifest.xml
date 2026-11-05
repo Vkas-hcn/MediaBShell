@@ -107,7 +107,7 @@
             android:exported="true"
             android:launchMode="singleTop"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
-            android:parentActivityName=".ui.detail.DetailActivity" />
+            android:parentActivityName=".MainActivity" />
 
         <activity
             android:name=".ads.AdActivity"

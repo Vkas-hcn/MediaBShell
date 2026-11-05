@@ -25,7 +25,7 @@ import com.hdvideoplay.media.permission.NotificationPermissionHelper
 import com.hdvideoplay.media.startup.HotStartManager
 import com.hdvideoplay.media.track.AdTrackingHelper
 import com.hdvideoplay.media.track.TrackEvents
-import com.hdvideoplay.media.ui.detail.DetailActivity
+import com.hdvideoplay.media.ui.player.PlayerActivity
 import com.hdvideoplay.media.ui.theme.MediaTheme
 import com.hdvideoplay.media.ui.uninstall.UninstallEntry
 import com.hdvideoplay.media.ui.uninstall.UninstallRetentionActivity
@@ -468,22 +468,25 @@ class SplashActivity : ComponentActivity() {
             finish()
             return
         }
-        // 通知点击带影视 ID：开屏广告结束后进对应详情页并自动播放。
-        // CLEAR_TOP|SINGLE_TOP 使详情页成为任务内唯一：重复触发（双击通知/启动页重拉起）复用已有实例，
-        // 避免 autoPlay 的 Player 压住详情页后 singleTop 失效、再压一个重复详情页。
+        // 通知点击带影视 ID：开屏结束后直接进播放页（与列表入口同一落地）。
+        // 不再经 Detail autoPlay 中转，避免「详情加载完再推一层播放页」二次跳转。
         val mediaId = intent.getIntExtra(EXTRA_MEDIA_ID, -1)
         if (mediaId > 0) {
-            Log.i(TAG, "NAV doExit → DetailActivity mediaId=" + mediaId + " instance=" + hashCode())
-            startActivity(
-                DetailActivity.createIntent(
-                    this,
-                    mediaId,
-                    autoPlay = true,
-                    fromPosition = TrackEvents.FROM_NOTIFY,
-                )
-                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                    .putExtra(EXTRA_SESSION_SOURCE, "notification"),
+            Log.i(TAG, "NAV doExit → PlayerActivity mediaId=" + mediaId + " instance=" + hashCode())
+            val player = PlayerActivity.createIntent(
+                this,
+                mediaId,
+                fromPosition = TrackEvents.FROM_NOTIFY,
             )
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .putExtra(EXTRA_SESSION_SOURCE, "notification")
+            if (intent.hasExtra(HintUtil.CO_SHOW_TYPE)) {
+                player.putExtra(HintUtil.CO_SHOW_TYPE, intent.getIntExtra(HintUtil.CO_SHOW_TYPE, -1))
+            }
+            if (intent.getBooleanExtra(EXTRA_FROM_FCM, false)) {
+                player.putExtra(EXTRA_FROM_FCM, true)
+            }
+            startActivity(player)
             finish()
             return
         }

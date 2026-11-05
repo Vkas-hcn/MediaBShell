@@ -161,6 +161,8 @@ class DetailActivity : ComponentActivity() {
                                 lineIndex = lineIndex,
                             ),
                         )
+                        // autoPlay 是中转：播放页起来后结束自己，避免栈上叠两层「详情」
+                        if (autoPlayOf()) finish()
                     },
                     onOpenRecommend = { item ->
                         val id = item.localId()

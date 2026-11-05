@@ -97,8 +97,10 @@ import com.hdvideoplay.media.data.api.MediaCdnHeaders
 import com.hdvideoplay.media.data.api.NetworkModule
 import com.hdvideoplay.media.data.dto.MediaItemDto
 import com.hdvideoplay.media.data.dto.PlaySourceDto
+import com.hdvideoplay.media.data.notice.HintUtil
 import com.hdvideoplay.media.track.PlaySessionTracker
 import com.hdvideoplay.media.track.TrackEvents
+import com.hdvideoplay.media.ui.splash.SplashActivity
 import com.hdvideoplay.media.util.CdnRequestHeaders
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import com.hdvideoplay.media.data.dto.SubtitleDto
@@ -137,6 +139,10 @@ class PlayerActivity : ComponentActivity() {
 
     private var returnAdConsumed = false
 
+    /** E19 reactivation_landing：通知落地播放页真正展示后只上报一次（旋转重建不重报）。 */
+    private var landingReported = false
+    private var createdFromSavedState = false
+
     /** Content-list opens Player directly — return_ad must fire here or it never shows. */
     private fun attemptReturnAdThenFinish() {
         if (returnAdConsumed) {
@@ -157,6 +163,7 @@ class PlayerActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        createdFromSavedState = savedInstanceState != null
         // V2C: enter returns previous page Leave (e.g. Detail→Player) — MUST handle longDwell.
         // Same leave: dwell vs firstWatch emit once, dwell preferred.
         val prevLeave = PageDwellTracker.enter(PageDwellTracker.PLAYER)
@@ -364,6 +371,24 @@ class PlayerActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // E19：通知深链落播放页（内容详情）真正可见时上报（不提前、不重复）。
+        if (!landingReported &&
+            !createdFromSavedState &&
+            intent.hasExtra(SplashActivity.EXTRA_SESSION_SOURCE)
+        ) {
+            landingReported = true
+            val source = intent.getStringExtra(SplashActivity.EXTRA_SESSION_SOURCE) ?: "notification"
+            val posId = when {
+                intent.hasExtra(HintUtil.CO_SHOW_TYPE) -> "news"
+                intent.getBooleanExtra(SplashActivity.EXTRA_FROM_FCM, false) -> "fcm"
+                else -> null
+            }
+            TrackEvents.reactivationLanding(source, "detail", posId)
+        }
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -377,20 +402,6 @@ class PlayerActivity : ComponentActivity() {
         // 兜底：系统回收/任务移除时，若会话已开始且未结束则补 play_end(back)。
         runCatching { sessionTracker.onDestroyFallback() }
         super.onDestroy()
-    }
-
-    /** Keep EXTRA_MEDIA_ID when system Up synthesizes the parent DetailActivity. */
-    override fun getParentActivityIntent(): Intent? {
-        val mid = mediaIdOf()
-        return if (mid > 0) {
-            com.hdvideoplay.media.ui.detail.DetailActivity.createIntent(
-                context = this,
-                mediaId = mid,
-                episode = episodeOf(),
-            )
-        } else {
-            super.getParentActivityIntent()
-        }
     }
 
     companion object {
