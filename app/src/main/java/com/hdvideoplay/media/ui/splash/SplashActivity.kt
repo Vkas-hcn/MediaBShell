@@ -427,7 +427,9 @@ class SplashActivity : ComponentActivity() {
             finish()
             return
         }
-        // 通知点击带影视 ID：开屏广告结束后进对应详情页并自动播放
+        // 通知点击带影视 ID：开屏广告结束后进对应详情页并自动播放。
+        // CLEAR_TOP|SINGLE_TOP 使详情页成为任务内唯一：重复触发（双击通知/启动页重拉起）复用已有实例，
+        // 避免 autoPlay 的 Player 压住详情页后 singleTop 失效、再压一个重复详情页。
         val mediaId = intent.getIntExtra(EXTRA_MEDIA_ID, -1)
         if (mediaId > 0) {
             startActivity(
@@ -436,7 +438,9 @@ class SplashActivity : ComponentActivity() {
                     mediaId,
                     autoPlay = true,
                     fromPosition = TrackEvents.FROM_NOTIFY,
-                ).putExtra(EXTRA_SESSION_SOURCE, "notification"),
+                )
+                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    .putExtra(EXTRA_SESSION_SOURCE, "notification"),
             )
             finish()
             return
