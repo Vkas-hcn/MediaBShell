@@ -18,7 +18,7 @@ object NotificationContentRepository {
     private const val PREFS_NAME = "notification_copy_rotation"
     private const val KEY_NEXT_INDEX = "next_index"
     private const val KEY_REMOTE_INDEX = "remote_index"
-    private const val POOL_SIZE = 5
+    private const val POOL_SIZE = 20
     private const val POOL_TTL_MS = 60 * 60 * 1000L
     private const val FETCH_TIMEOUT_MS = 5_000L
     private const val SUMMARY_MAX_LEN = 200
