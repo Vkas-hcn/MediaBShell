@@ -71,6 +71,7 @@ fun DetailScreen(
             model = (current as? UiState.Success)?.data,
             loading = current is UiState.Loading,
             autoPlay = autoPlay,
+            consumeAutoPlayOnce = viewModel::consumeAutoPlayOnce,
             onBack = onBack,
             onSelectSeason = viewModel::selectSeason,
             onSelectLine = viewModel::selectLine,
@@ -129,6 +130,7 @@ private fun DetailContent(
     model: DetailUiModel?,
     loading: Boolean,
     autoPlay: Boolean,
+    consumeAutoPlayOnce: () -> Boolean,
     onBack: () -> Unit,
     onSelectSeason: (Int) -> Unit,
     onSelectLine: (Int) -> Unit,
@@ -153,7 +155,6 @@ private fun DetailContent(
     // UI-only position stub for embedded shell (real Exo is in PlayerActivity).
     var shellPos by remember { mutableStateOf(0L) }
     val shellDur = DETAIL_SHELL_DURATION_MS
-    var autoPlayFired by remember(mediaId) { mutableStateOf(false) }
     var selectedEpisode by remember(mediaId, playEpisodeNumber) {
         mutableStateOf(playEpisodeNumber)
     }
@@ -174,10 +175,16 @@ private fun DetailContent(
         selectedLinePlayable,
         mediaId,
     ) {
-        if (loading || !autoPlay || autoPlayFired || mediaId <= 0) return@LaunchedEffect
+        if (loading || !autoPlay || mediaId <= 0) return@LaunchedEffect
         if (linesStatus != LinesStatus.Ready || lines.isEmpty()) return@LaunchedEffect
         if (!selectedLinePlayable) return@LaunchedEffect
-        autoPlayFired = true
+        // 一次性消费（ViewModel 持有，跨 recreate 保持）：详情页重建/重组不重复自动跳转
+        if (!consumeAutoPlayOnce()) return@LaunchedEffect
+        android.util.Log.i(
+            "DetailScreen",
+            "NAV autoPlay fire mediaId=" + mediaId + " ep=" + playEpisodeNumber +
+                " line=" + selectedLineIndex,
+        )
         playEpisode(playEpisodeNumber, fullscreen = false, lineIndex = selectedLineIndex)
     }
 

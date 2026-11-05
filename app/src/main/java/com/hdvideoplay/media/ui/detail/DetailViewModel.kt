@@ -77,6 +77,19 @@ class DetailViewModel(
     /** detail_view 按数据实例身份去重（同一轮数据只报一次）。 */
     private var detailViewReportedForData: DetailUiModel? = null
 
+    /**
+     * autoPlay 一次性消费：ViewModel 跨 recreate 存活，
+     * 避免详情页重建/重组（onNewIntent→recreate、装片回调等）时再次自动跳转播放器。
+     */
+    @Volatile
+    private var autoPlayConsumed = false
+
+    fun consumeAutoPlayOnce(): Boolean {
+        if (autoPlayConsumed) return false
+        autoPlayConsumed = true
+        return true
+    }
+
     init {
         if (mediaId <= 0) {
             _state.value = UiState.Error("invalid_media")

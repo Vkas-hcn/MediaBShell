@@ -25,7 +25,7 @@ import com.hdvideoplay.media.permission.NotificationPermissionHelper
 import com.hdvideoplay.media.startup.HotStartManager
 import com.hdvideoplay.media.track.AdTrackingHelper
 import com.hdvideoplay.media.track.TrackEvents
-import com.hdvideoplay.media.ui.detail.DetailActivity
+import com.hdvideoplay.media.ui.player.PlayerActivity
 import com.hdvideoplay.media.ui.theme.MediaTheme
 import com.hdvideoplay.media.ui.uninstall.UninstallEntry
 import com.hdvideoplay.media.ui.uninstall.UninstallRetentionActivity
@@ -89,6 +89,18 @@ class SplashActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Log.i(TAG, "NAV onCreate instance=" + hashCode() +
+            " mediaId=" + intent.getIntExtra(EXTRA_MEDIA_ID, -1) +
+            " showType=" + intent.getIntExtra(HintUtil.CO_SHOW_TYPE, -1) +
+            " notifId=" + intent.getIntExtra(HintUtil.CO_NOTIFICATION_ID, -1) +
+            " hot=" + isHotStart + " retMain=" + isReturnToMain +
+            " flags=" + Integer.toHexString(intent.flags))
+        // 重复点击同一条通知：直接关闭本次启动页，不重复走开屏广告/详情页跳转
+        if (markNotificationClickConsumed(intent)) {
+            Log.i(TAG, "NAV onCreate DUP — finish instance=" + hashCode())
+            finish()
+            return
+        }
         enableEdgeToEdge()
         isShowing = true
         reportNotificationClickIfNeeded(intent)
@@ -134,6 +146,16 @@ class SplashActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        Log.i(TAG, "NAV onNewIntent instance=" + hashCode() +
+            " finishing=" + isFinishing + " destroyed=" + isDestroyed +
+            " mediaId=" + intent.getIntExtra(EXTRA_MEDIA_ID, -1) +
+            " notifId=" + intent.getIntExtra(HintUtil.CO_NOTIFICATION_ID, -1) +
+            " hot=" + intent.getBooleanExtra(EXTRA_HOT_START, false))
+        // 重复点击同一条通知：忽略本次（第一次点击已处理，避免重走开屏/详情）
+        if (markNotificationClickConsumed(intent)) {
+            Log.i(TAG, "NAV onNewIntent DUP — ignore instance=" + hashCode())
+            return
+        }
         reportNotificationClickIfNeeded(intent)
         if (intent.getBooleanExtra(EXTRA_HOT_START, false)) {
             if (isFinishing || isDestroyed) {
@@ -181,6 +203,25 @@ class SplashActivity : ComponentActivity() {
             return
         }
         startFlow()
+    }
+
+    /**
+     * 本地新闻通知点击进程级去重：同一通知 ID 只处理第一次点击。
+     * 返回 true 表示本次是重复点击，调用方应忽略（不再走开屏广告/详情页）。
+     */
+    private fun markNotificationClickConsumed(intent: Intent): Boolean {
+        val showType = intent.getIntExtra(HintUtil.CO_SHOW_TYPE, -1)
+        val notificationId = intent.getIntExtra(HintUtil.CO_NOTIFICATION_ID, -1)
+        if (showType < 0 || notificationId < 0) return false
+        synchronized(clickLock) {
+            if (notificationId == handledNotificationClickId) {
+                Log.i(TAG, "NAV click DUP notifId=" + notificationId + " handled=" + handledNotificationClickId)
+                return true
+            }
+            handledNotificationClickId = notificationId
+            Log.i(TAG, "NAV click FIRST notifId=" + notificationId)
+            return false
+        }
     }
 
     /**
@@ -427,17 +468,25 @@ class SplashActivity : ComponentActivity() {
             finish()
             return
         }
-        // 通知点击带影视 ID：开屏广告结束后进对应详情页并自动播放
+        // 通知点击带影视 ID：开屏结束后直接进播放页（与列表入口同一落地）。
+        // 不再经 Detail autoPlay 中转，避免「详情加载完再推一层播放页」二次跳转。
         val mediaId = intent.getIntExtra(EXTRA_MEDIA_ID, -1)
         if (mediaId > 0) {
-            startActivity(
-                DetailActivity.createIntent(
-                    this,
-                    mediaId,
-                    autoPlay = true,
-                    fromPosition = TrackEvents.FROM_NOTIFY,
-                ).putExtra(EXTRA_SESSION_SOURCE, "notification"),
+            Log.i(TAG, "NAV doExit → PlayerActivity mediaId=" + mediaId + " instance=" + hashCode())
+            val player = PlayerActivity.createIntent(
+                this,
+                mediaId,
+                fromPosition = TrackEvents.FROM_NOTIFY,
             )
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .putExtra(EXTRA_SESSION_SOURCE, "notification")
+            if (intent.hasExtra(HintUtil.CO_SHOW_TYPE)) {
+                player.putExtra(HintUtil.CO_SHOW_TYPE, intent.getIntExtra(HintUtil.CO_SHOW_TYPE, -1))
+            }
+            if (intent.getBooleanExtra(EXTRA_FROM_FCM, false)) {
+                player.putExtra(EXTRA_FROM_FCM, true)
+            }
+            startActivity(player)
             finish()
             return
         }
@@ -518,6 +567,11 @@ class SplashActivity : ComponentActivity() {
         /** 进程级启动流程代数：新实例/热启动递增，旧广告回调按代数丢弃。 */
         @Volatile
         private var startupEpoch = 0
+
+        /** 已处理的本地通知点击 ID（进程级去重，同一条通知连点只处理第一次）。 */
+        @Volatile
+        private var handledNotificationClickId = -1
+        private val clickLock = Any()
 
         /** 进程被系统新建时为 false；第一次进入启动页后置 true（对齐 HyperVideo）。 */
         private var processAlreadyEntered = false
