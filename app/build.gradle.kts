@@ -21,7 +21,7 @@ android {
         versionCode = 5
         versionName = "1.0.4"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", "BASE_URL", "\"https://stage.hdvideoplay.top\"")
+        buildConfigField("String", "BASE_URL", "\"https://api.hdvideoplay.top\"")
     }
 
     buildTypes {
